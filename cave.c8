@@ -1,0 +1,656 @@
+move_delay equ 2
+;keys
+start_key equ 15
+;dirs
+up equ 2
+left equ 4
+right equ 6
+down equ 8
+;variables
+;location of drawing
+draw_x var v4
+draw_y var v5
+;the current level
+level var va
+;position of dot
+dot_x var vb
+dot_y var vc
+;the direction the dot moves
+dot_dir var vd
+;clear screen
+	cls
+;position of top banner edge
+	ld draw_x,0
+	ld draw_y,0
+	ld i,banner_edge
+;jump past banner edge
+	jp past_banner_edge
+banner_edge
+	byte %11..11..
+	byte %..11..11
+past_banner_edge
+;position of bottom banner edge
+	ld v6,30
+draw_banner_edges_loop
+	drw draw_x,draw_y,2
+	drw draw_x,v6,2
+;next segment
+	add draw_x,8
+;loop until done
+	sne draw_x,64
+	jp draw_banner_edges_end
+	jp draw_banner_edges_loop
+draw_banner_edges_end
+;jump past logo segment
+;all jumps could have been simplified by putting graphics at the end
+	ld cave_logo_c
+	jp past_logo_c
+cave_logo_c
+	byte %11111111
+	byte %11111111
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11111111
+	byte %11111111
+past_logo_c
+;position of cave logo
+	ld draw_x,13
+	ld draw_y,9
+;draw letter c
+	drw draw_x,draw_y,14
+	add draw_x,10
+;draw letter a
+	ld i,cave_logo_a
+	drw draw_x,draw_y,14
+;jump past logo segment
+	jp past_logo_a
+cave_logo_a
+	byte %11111111
+	byte %11111111
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11111111
+	byte %11111111
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+past_logo_a
+	add draw_x,10
+;draw letter v
+	ld i,cave_logo_v
+	drw draw_x,draw_y,14
+;jump past logo segment
+	jp past_logo_v
+cave_logo_v
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %..1111..
+	byte %..1111..
+	byte %...11...
+	byte %...11...
+past_logo_v
+	add draw_x,10
+;draw letter e
+	ld i,cave_logo_e
+	drw draw_x,draw_y,14
+;jump past logo segment
+	jp past_logo_e
+cave_logo_e
+	byte %11111111
+	byte %11111111
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11111111
+	byte %11111111
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11111111
+	byte %11111111
+past_logo_e
+;init vars
+	ld level,1
+	ld dot_x,4
+	ld dot_y,14
+	ld dot_dir,0
+	ld i,block
+	jp wait_for_start
+dot
+	byte %1.......
+
+block
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	pad 1
+fill_screen
+	cls
+;start at top left of screen
+	ld draw_x,0
+	ld draw_y,0
+fill_scren_loop
+;draw block
+	drw draw_x,draw_y,8
+;next one
+	add draw_x,8
+;loop until done
+	sne draw_x,64
+	call next_block_row
+;loop until screen is filled
+	sne draw_y,20
+	jp fill_screen_done
+	jp fill_scren_loop
+	
+;move on to the next row
+next_block_row
+	ld draw_x,0
+	add draw_y,8
+	ret
+;unclear why jump here and not straight to continue code
+fill_screen_done
+	jp draw_level
+	
+wait_for_start
+	ld v0,start_key
+wait_for_start_loop
+;wait until start key is pressed
+	skp v0,0
+	jp wait_for_f_loop
+	jp fill_screen
+
+draw_level
+;call the appropriate draw level function based on level
+	sne level,1
+	call draw_level_1
+	sne level,2
+	call draw_level_2
+	sne level,3
+	call draw_level_3
+	sne level,4
+	call draw_level_4
+	sne level,5
+	call draw_level_5
+	sne level,6
+	call draw_level_6
+	sne level,7
+	call draw_level_7
+	sne level,8
+	call draw_level_8
+	jp main_loop
+
+draw_level_1
+	ld i,block
+;draw blocks at the following locations
+	ld draw_x,2
+	ld draw_y,2
+	drw draw_x,draw_y,8
+	ld draw_y,10
+	drw draw_x,draw_y,8
+	ld draw_y,18
+	drw draw_x,draw_y,8
+	ld draw_x,10
+	ld draw_y,5
+;these blocks are shorter
+	drw draw_x,draw_y,3
+	ld draw_x,18
+	drw draw_x,draw_y,3
+	ld draw_x,26
+	drw draw_x,draw_y,3
+	ld draw_x,34
+	drw draw_x,draw_y,3
+	ld draw_x,42
+	drw draw_x,draw_y,3
+	ld draw_x,50
+	drw draw_x,draw_y,3
+	ld i,thin_vertical
+;jump past graphic
+	jp past_vertical
+	
+thin_vertical
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+	byte %111111..
+
+past_vertical
+;draw long vertical
+	add draw_y,3
+	add draw_x,2
+	drw draw_x,draw_y,12
+;draw short segment at the end
+	add draw_x,6
+	add draw_y,9
+	drw draw_x,draw_y,3
+	ret
+
+main_loop
+;draw dot
+	ld i,dot
+	drw dot_x,dot_y,1
+;check collision
+	sne vf,1
+	jp collision_detected
+;check up key
+	ld v0,up
+	sknp v0
+	ld dot_dir,up
+;check left key
+	ld v0,left
+	sknp v0
+	ld dot_dir,left
+;check right key
+	ld v0,right
+	sknp v0
+	ld dot_dir,right
+;check down key
+	ld v0,down
+	sknp v0
+	ld dot_dir,down
+;hide dot
+	drw dot_x,dot_y,1
+;move dot up if needed
+	sne dot_dir,up
+	add dot_y,-1
+;move dot left if needed
+	sne dot_dir,left
+	add dot_x,-1
+;move dot right if needed
+	sne dot_dir,right
+	add dot_x,1
+;move dot down if needed
+	sne dot_dir,down
+	add dot_y,1
+;check if we reached the right side
+	sne dot_x,64
+	jp reached_right_side
+;check if we reached the left side
+	sne dot_x,-1
+	jp reached_left_side
+;wait 2 frames
+	ld v0,move_delay
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+	jp main_loop
+	
+reached_right_side
+;move to next level
+	add level,1
+	sne level,9
+	jp game_win
+reached_left_side
+	ld dot_x,1
+;start drawing the next level
+	ld i,brick
+	jp fill_screen
+
+;bug- reached_left_side should be here
+;move to previous level
+	add level,-1
+	ld dot_x,63
+;start drawing the previous level
+	ld i,brick
+	jp fill_screen
+
+collision_detected
+;play a short beep
+	ld v0,3
+	ld st,v0
+;wait for start key
+	ld v0,start_key
+wait_for_again_loop
+	skp v0
+	jp wait_for_again_loop
+;init vars again
+	ld level,1
+	ld dot_x,4
+	ld dot_y,14
+	ld dot_dir,0
+	ld i,brick
+	cls
+	jp fill_screen
+
+draw_level_2
+;start with thin segments here
+	ld draw_x,0
+	ld draw_y,17
+	ld i,block
+	drw draw_x,draw_y,3
+	add draw_x,8
+	drw draw_x,draw_y,3
+	add draw_x,8
+;start offsetting up
+	add draw_y,-1
+	drw draw_x,draw_y,3
+	add draw_x,8
+	add draw_y,-1
+;now keep drawing straight
+	drw draw_x,draw_y,3
+	add draw_x,8
+	drw draw_x,draw_y,3
+	add draw_x,8
+	drw draw_x,draw_y,3
+	add draw_x,8
+;now offset down
+	add draw_y,1
+	drw draw_x,draw_y,3
+	add draw_x,8
+	add draw_y,1
+	ret
+
+draw_level_3
+;again stat with thin segments
+	ld draw_x,0
+	ld draw_y,17
+	ld i,brick
+	drw draw_x,draw_y,3
+	add draw_x,8
+	drw draw_x,draw_y,3
+	add draw_x,8
+;draw short tunnel offset by a lot
+	add draw_y,2
+	add draw_x,8
+;now a really thin tunnel
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	ret
+
+draw_level_4
+;continue with the really thin tunnel
+	ld draw_x,0
+	ld draw_y,19
+	ld i,brick
+	drw draw_x,draw_y,1
+	ld i,dot
+;draw one more dot
+	add draw_x,8
+	drw draw_x,draw_y,1
+;now draw thin vertical tunnel
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+;back to the thin horizontal tunnel
+	ld i,brick
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+;start enlarging the tunnel
+	drw draw_x,draw_y,2
+	add draw_x,8
+	add draw_y,-1
+	drw draw_x,draw_y,3
+	add draw_x,8
+	drw draw_x,draw_y,4
+	add draw_x,8
+	add draw_y,-1
+	drw draw_x,draw_y,6
+	add draw_x,8
+	add draw_y,-1
+	drw draw_x,draw_y,8
+	ret
+
+draw_level_5
+;continue the regular tunnel
+	ld draw_x,0
+	ld draw_y,18
+	ld i,brick
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+	add draw_x,8
+	drw draw_x,draw_y,8
+;now draw vertical tunnel
+	ld i,dot
+	add draw_y,-1
+;bug: should be -20 making this level unbeatable
+	add draw_x,20
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_y,-1
+;now start drawing horizontal tunnel
+	ld i,brick
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	ret
+
+draw_level_6
+;keep drawing the horizontal tunnel
+	ld draw_x,0
+	ld draw_y,9
+	ld i,brick
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	ld i,dot
+;now draw long vertical tunnel
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+	drw draw_x,draw_y,1
+	add draw_y,1
+;return to the horizontal tunnel
+	ld i,brick
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	ret
+
+draw_level_7
+;keep drawing horizontal tunnel
+	ld draw_x,0
+	ld draw_y,26
+	ld i,brick
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+;move up for 1 segment
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	ret
+
+draw_level_8
+;keep drawing horizontal tunnel
+	ld draw_x,0
+	ld draw_y,25
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+;move up for 1 segment
+	add draw_y,-1
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+	add draw_x,8
+	drw draw_x,draw_y,1
+
+game_win
+;clear screen
+	cls
+;position of you won text
+	ld v7,3
+	ld v8,3
+	ld i,you_won1
+	jp past_you_won
+	
+you_won1
+	byte %1.1.111.
+	byte %1.1.1.1.
+	byte %111.1.1.
+	byte %.1..1.1.
+	byte %.1..111.
+	pad 1
+you_won2
+	byte %1.1..1..
+	byte %1.1..1..
+	byte %1.1..1..
+	byte %1.1..1.1
+	byte %111...1.
+	pad 1
+you_won3
+	byte %.1.111.1
+	byte %.1.1.1.1
+	byte %.1.1.1.1
+	byte %.1.1.1.1
+	byte %1..111.1
+	pad 1
+you_won4
+	byte %11..1...
+	byte %.1..1...
+	byte %.1..1...
+	byte %.1......
+	byte %.1..1...
+	pad 1
+past_you_won
+;draw first segment
+	drw v7,v8,5
+;draw second segment
+	ld i,you_won2
+	add v7,8
+	drw v7,v8,5
+;draw third segment
+	add v7,8
+	ld i,you_won3
+	drw v7,v8,5
+;draw fourth segment
+	add v7,8
+	ld i,you_won4
+	drw v7,v8,5
+;finally go in an infinite loop
+infinte_loop
+	jp infinte_loop
+	

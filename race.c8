@@ -1,0 +1,142 @@
+;initial positions of stuff
+initial_x equ 60
+initial_y equ 45
+initial_wall_pos equ 60
+;limits of stuff
+right_border equ 110
+wall_limit equ 90
+;controlls
+left_key equ 7
+right_key equ 8
+;vars for the car position
+car_x var v5
+car_y var v6
+;previous car positions
+prev_x var v3
+prev_y var v4
+wall_pos var v7
+;set high resolution mode
+	high
+;init positions
+	ld car_x,initial_x
+	ld car_y,initial_y
+	ld wall_pos,initial_wall_pos
+	ld prev_x,v5
+	ld prev_y,v6
+;initially draw the car graphic
+	ld i,car
+	drw prev_x,prev_y,0
+;begin the main loop
+main_loop
+;draw the car graphic
+	ld i,car
+	drw prev_x,prev_y,0
+;scroll 3 pixels down and draw the car again
+	scd 3
+	drw car_x,car_y,0
+;check collision
+	se vf,0
+;if hit then jump
+	jp  car_hit
+	ld v0,wall_pos
+;draw wall
+	call draw_wall
+;set previous positions
+	ld prev_x,car_x
+	ld prev_y,car_y
+;check if the left key is pressed
+	ld v0,left_key
+	sknp v0
+;if it is go left
+	call go_left
+;check if the right key pressed
+	ld v0,right_key
+	sknp v0
+;if it is go tight
+	call go_right
+;move wall right 25% of the time
+	rnd v0,3
+	sne v0,0
+	call move_wall_right
+;move wall left 25% of the time
+	rnd v0,3
+	sne v0,0
+	call move_wall_left
+	jp main_loop
+;endless loop if the car is hit
+car_hit
+	jp car_hit
+
+;moves the car right
+go_right
+	add car_x,1
+;prevent from going off screen
+	sne car_x,right_border
+	ld car_x,right_border-1
+	ret
+
+;moves the car left	
+go_left
+	ld v0,1
+	sub car_x,v0
+;prevent car from going off screen (bug, should be v5)
+	sne vf,0
+	ld car_x,0
+	ret
+
+;moves the wall to the right
+move_wall_right
+	add wall_pos,1
+;prevent going off screen
+	sne wall_pos,wall_limit
+	ld wall_pos,wall_limit-1
+	ret
+
+;moves the wall to the left
+move_wall_left
+	ld v0,1
+	sub wall_pos,1
+;prevent wall from going off screen (bug, should be v7)
+	sne vf,0
+	ld wall_pos,0
+	ret
+
+;draws a wall at x=v0
+draw_wall
+;draw the wall at the top so y=0
+	ld v1,0
+;draw the wall 3 pixels tall
+	ld i,wall
+	drw v0,v1,3
+;draw another wall 25 pixels to the right
+	add v0,25
+	drw v0,v1,3
+	ret
+
+;the wall graphic
+wall
+	byte %1.1.....
+	byte %.1......
+	byte %1.1.....
+;one zero byte for no reason
+zero
+	pad 1
+;the car graphic
+car
+	word %..11........11..
+	word %..111111111111..
+	word %..11..1..1..11..
+	word %......1..1......
+	word %.....1....1.....
+	word %.....1....1.....
+	word %.....1....1.....
+	word %.....1....1.....
+	word %1111.1....1.1111
+	word %1111.1....1.1111
+	word %111111.11.111111
+	word %1111.11..11.1111
+	word %1111.11..11.1111
+	word %.....11..11.....
+	word %..111111111111..
+	word %.11111111111111.
+	

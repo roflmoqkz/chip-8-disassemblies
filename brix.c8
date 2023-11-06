@@ -1,0 +1,240 @@
+;keys
+left equ 4
+right equ 6
+;variables
+score var v5
+;ball variables
+;position
+ball_x var v6
+ball_y var v7
+;velocity
+ball_vx var v8
+ball_vy var v9
+paddle_x var vc
+;used for draw only
+paddle_y var vd
+lives var ve
+;init vars
+	ld lives,5
+	ld score,0
+;initial brick position
+	ld vb,6
+draw_brick_loop
+	ld va,0
+draw_brick_row_loop
+;draw brick
+	ld i,brick
+	drw va,vb,1
+;next position
+	add va,4
+	jp draw_brick_row_loop
+;next row
+	add vb,2
+	jp draw_brick_loop
+;loop until complete
+	se vb,18
+;init paddle position
+	ld paddle_x,32
+	ld paddle_y,31
+;draw paddle
+	ld i,paddle
+	drw paddle_x,paddle_y,1
+	call draw_score
+;draw life markers
+	ld v0,0
+	ld v1,0
+	ld i,life_markers
+	drw v0,v1,1
+;draw remaining one
+	add v0,8
+	ld i,ball
+	drw v0,v1,1
+game_loop
+;wait 64 frames
+	ld v0,64
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+;init ball with random x position
+	rnd ball_x,15
+	ld ball_y,30
+	ld ball_vx,1
+	ld ball_vy,-1
+;draw ball
+	ld i,ball
+	drw ball_x,ball_y,1
+main_loop
+;hide paddle before movement
+	ld i,paddle
+	drw paddle_x,paddle_y,1
+;check if left pressed
+	ld v0,left
+	sknp v0
+;move paddle left
+	add paddle_x,-2
+;check if right pressed
+	ld v0,right
+	sknp v0
+;move paddle right
+	add paddle_x,2
+;constrain the position within the screen
+	ld v0,#3f
+	and paddle_x,v0
+;draw paddle
+	drw paddle_x,paddle_y,1
+;hide ball before movement
+	ld i,ball
+	drw ball_x,ball_y,1
+	add ball_x,ball_vx
+	add ball_y,ball_vy
+;wrap the position around (unnecessary since it bounces)
+	ld v0,#3f
+	and ball_x,v0
+	ld v1,#1f
+	and ball_y,v1
+;check if ball reached the bottom of the screen (regardless of paddle hit)
+	sne ball_y,31
+	jp ball_at_bottom
+resume_hit
+;check bounce off left side
+	sne ball_x,0
+	ld ball_vx,1
+;check bounce off right side
+	sne ball_x,63
+	ld ball_vx,-1
+;check bounce off top side
+	sne ball_y,0
+	ld ball_vy,1
+;draw ball in the new position
+	drw ball_x,ball_y,1
+;check collision
+	se vf,1
+	jp no_collision
+;ignore collision with the paddle
+	sne ball_y,31
+	jp no_collision
+;ignore collition at the top 5 pixels (with score and lives)
+	ld v0,5
+	sub v0,ball_y
+	se vf,0
+	jp no_collision
+;play a short beep
+	ld v0,1
+	ld st,v0
+;get location of brick that was hit
+	ld v0,ball_x
+	ld v1,#fc
+	and v0,v1
+;erase brick
+	ld i,brick
+	drw v0,ball_y,1
+;flip y velocity
+	ld v0,#fe
+	xor ball_vy,0
+;increment score
+	call draw_score
+	add score,1
+	call draw_score
+;check if we hit all bricks
+	jp game_over
+no_collision 
+	jp main_loop
+	
+ball_at_bottom
+;flip y velocity (unnecessary as it will be done later)
+	ld ball_vy,-1
+;find ball location relative to paddle
+	ld v0,ball_x
+	sub v0,paddle_x
+;check if ball is to the left of paddle
+	se vf,1
+	jp ball_miss
+;check if ball is in first 2 pixels
+	ld v1,2
+	sub v0,v1
+	se vf,1
+	jp ball_hit_left
+;check if ball is in middle 2 pixels
+	sub v0,v1
+	se vf,1
+	jp ball_hit_middle
+;check if ball is in right 2 pixels
+	sub v0,v1
+	se vf,1
+	jp ball_hit_right
+;otherwise it missed	
+ball_miss
+;play long beep
+	ld v0,32
+	ld st,v0
+	ld i,ball
+;remove life
+	add ve,-1
+;double lives to get x position
+	ld v0,ve
+	add v0,v0
+	ld v1,0
+;remove life marker
+	drw v0,v1,1
+;check if all lives are gone
+	se ve,0
+	jp game_loop
+game_over
+;infinite loop at the end
+	jp game_over
+
+ball_hit_left
+;increase x velocity to the left, capping at -1
+	add ball_vx,-1
+	sne ball_vx,-2
+	ld ball_vx,-1
+	jp ball_hit_middle
+ball_hit_right
+;increase x velocity to the right, capping at 1
+	add ball_vx,1
+	sne ball_vx,2
+	ld ball_vx,1
+ball_hit_middle
+;play bit longer beep
+	ld v0,4
+	ld st,v0
+;make ball go up
+	ld ball_vy,-1
+;resume gameplay
+	jp resume_hit
+	
+;draw the score
+draw_score
+	ld i,bcd_target
+	bcd draw_score
+;get digits
+	ld v2,[i]
+;draw tens digit
+	ld f,v1
+	ld v3,55
+	ld v4,0
+	drw v3,v4,5
+;draw units digit
+	add v3,5
+	ld f,v2
+	drw v3,v4,5
+	ret
+	
+;graphics (no idea what padding is for
+brick
+	byte %111.....
+	pad 1
+;shared with life marker
+ball
+	byte %1.......
+	pad 1
+paddle
+	byte %111111..
+	pad 1
+life_markers
+	byte %1.1.1.1.
+	pad 1
+bcd_target
+	pad 4

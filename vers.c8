@@ -1,0 +1,192 @@
+;direction
+up equ 1
+left equ 2
+down equ 3
+right equ 4
+;keys
+player1_up equ 7
+player1_left equ 1
+player1_down equ 10
+player1_right equ 2
+player2_up equ 12
+player2_left equ 11
+player2_down equ 13
+player2_right equ 15
+;variables
+;player 1
+player1_x var v0
+player1_y var v1
+player1_dir var v2
+player1_score var v3
+;player 2
+player2_x var v4
+player2_y var v5
+player2_dir var v6
+player2_score var v7
+;jump past the copyright and graphics
+	jp start
+	byte "JMN 1991 SOFTWARES "
+;graphics
+;shared with dot
+vert_wall
+	byte %1.......
+	byte %1.......
+horiz_wall
+	byte %11111111
+	byte #00,#00
+start
+;clear score
+	ld player1_score,0
+	ld player2_score,0
+game_loop
+;clear screen
+	cls
+	ld i,horiz_wall
+;init wall position
+	ld v0,0
+	ld v1,0
+draw_horiz_wall_loop
+;draw horizontal wall
+	drw v0,v1,horiz_wall
+;draw wall above?? (probably was intended to be at the bottom)
+	add v1,-1
+	drw v0,v1,1
+;next position
+	add v1,1
+	add v0,8
+;loop until done
+	se v0,64
+	jp draw_horiz_wall_loop
+;start drawing 2 below horiz wall
+	add v1,1
+;draw vertical wall
+	ld i,vert_wall
+draw_vert_wall_loop
+	drw v0,v1,2
+;draw wall to the left (draws it on the right)
+	add v0,-1
+	drw v0,v1,2
+;next position
+	add v0,1
+	add v1,2
+;loop until done
+	se v1,31
+	jp draw_vert_wall_loop
+;initialize both players
+	ld player1_x,8
+	ld player1_y,10
+	ld player1_dir,4
+	ld player2_x,55
+	ld player2_y,15
+	ld player2_dir,2
+;draw the 2 initial dots
+	drw player1_x,player1_y,1
+	drw player2_x,player2_y,1
+main_loop
+;check if player 1 left is pressed
+	ld v8,player1_left
+	sknp v8
+	ld player1_dir,left
+;check if player 1 right is pressed
+	ld v8,player1_right
+	sknp v8
+	ld player1_dir,left
+;check if player 1 up is pressed
+	ld v8,player1_up
+	sknp v8
+	ld player1_dir,up
+;check if player 1 down is pressed
+	ld v8,player1_down
+	sknp v8
+	ld player1_dir,down
+;check if player 2 left is pressed
+	ld v8,player2_left
+	sknp v8
+	ld player2_dir,left
+;check if player 2 right is pressed
+	ld v8,player2_right
+	sknp v8
+	ld player2_dir,right
+;check if player 2 up is pressed
+	ld v8,player2_up
+	sknp v8
+	ld player2_dir,up
+;check if player 2 down is pressed
+	ld v8,player2_down
+	sknp v8
+	ld player2_dir,down
+;check if player 1 moves up
+	sne player1_dir,up
+	add player1_y,-1
+;check if player 1 moves left
+	sne player1_dir,left
+	add player1_x,-1
+;check if player 1 moves down
+	sne player1_dir,down
+	add player1_y,1
+;check if player 1 moves right
+	sne player1_dir,right
+	add player1_x,1
+;check if player 2 moves up
+	sne player2_dir,up
+	add player2_y,-1
+;check if player 2 moves left
+	sne player2_dir,left
+	add player2_x,-1
+;check if player 2 moves down
+	sne player2_dir,down
+	add player2_y,1
+;check if player 2 moves right
+	sne player2_dir,right
+	add player2_x,1
+;draw new player 1 dot
+	drw player1_x,player1_y,1
+;check collision
+	se vf,0
+	jp player1_hit
+;draw new player 2 dot
+	drw player2_x,player2_y,1
+;check collision
+	se vf,0
+	jp player2_hit
+	jp main_loop
+player1_hit
+;increment player 2 score
+	add player2_score,1
+	jp after_addition
+;increment player 1 score
+	add playera_score,1
+after_addition
+;wait a little
+	ld v8,0
+wait_loop
+	add v8,1
+	se v8,0
+	jp wait_loop
+;clear scren
+	cls
+;draw player 1 score
+	ld v0,8
+	ld v1,4
+	ld f,player1_score
+	drw v0,v1,5
+;draw player 2 score
+	ld v0,52
+	ld f,player2_score
+	drw v0,v1,5
+;wait a little again
+	ld v8,0
+wait_loop2
+	add v8,1
+	se v8,0
+	jp wait_loop2
+;end the game if either player has 8 points
+	se player1_score,8
+	jp end_game
+	se player2_score,8
+	jp end_game
+;otherwise begin new round
+	jp game_loop
+;the game is over, go in an infinite loop
+end_game
+	jp end_game

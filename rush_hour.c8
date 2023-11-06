@@ -1,0 +1,2116 @@
+;controls
+menu_back_key equ 1
+move_up_key equ 5
+move_left_key equ 7
+move_down_key equ 8
+move_right_key equ 9
+select_key equ 10
+retry_key equ 1
+;text constants
+wait_text equ 0
+nice_text equ 10
+retry_text equ 18
+quit_text equ 27
+ok_text equ 35
+lock_text equ 40
+back_text equ 47
+choose_boardset_text equ 54
+traffic_jam_puzzle_text equ 72
+press_a_key_text equ 93
+well_done_text equ 107
+unlocked_next_set_text equ 120
+password_text equ 140
+no_text equ 152
+play_text equ 157
+unlock_text equ 164
+orig_nob_thinkfun equ 173
+for_chip_by_hap equ 194
+	call d47
+	se v0,v1
+	call draw_copyright
+;jump past the copyright
+	jp start
+	
+;temporary memory for various uses
+temp
+;copyright
+	byte "[by"
+car_offset_table1
+	byte " "
+;store here the offsets to get car graphics according to index
+;0-short horiz 1/5-short vert 2-long horiz 3/7-long vert 4-short player 6-long player
+car_offset_table
+	byte "hap]"
+	byte 154,0,136,0
+;various options for lower offset table
+car_offset_options
+	byte 132,53,136,0
+	byte 136,106,128,39
+	byte 132,53,128,39
+	byte 136,106,132,25
+
+start
+	cls
+	ld i,logo_vars
+	ld va,[i]
+draw_logo_loop
+;this is always 10, wait 10 frames
+	ld dt,v3
+;get current letter pairs
+	ld i,logo_params
+	add i,v2
+	ld v1,[i]
+	ld i,rush_hour_logo
+	add i,v0
+	call wait_remaining
+;left letter
+	drw v4,va,7
+;right letter
+	add i,v1
+	drw v9,va,7
+;beep for 1 frame
+	ld st,va
+;move to next letter
+	add v4,8
+	add v9,-8
+	add v2,2
+;loop until done
+	se v2,8
+	jp draw_logo_loop
+	ld v0,1
+	call wait_amount
+	ld v8,traffic_jam_puzzle_text
+	call draw_text
+	call d47
+	se v0,v1
+	jp menu_screen
+	
+return_from_password_screen
+	call long_wait
+	ld v8,press_a_key_text
+	call draw_text
+	ld v0,k
+
+;screen where you select boardset
+select_set_screen
+;first instruction is cls
+	byte 0
+hyphen
+	byte %111.....
+	ld v0,15
+	call wait_amount
+	ld i,default_boardset_address
+	ld v1,[i]
+	ld i,boardset_address
+	ld [i],v1
+;load vars
+	ld i,select_set_screen
+	ld v5,[i]
+;draw top segment
+	ld i,block
+draw_top_loop
+	drw v5,v4,6
+;next segment
+	add v5,8
+;loop until done
+	se v5,64
+	jp draw_top_loop
+;draw map background
+draw_map_background_loop
+	drw v4,v0,13
+	drw v4,v1,12
+;next segment
+	add v4,8
+;loop until done
+	se v4,40
+	jp draw_map_background_loop
+node_column_done
+;next map node
+	add v2,6
+	add v1,8
+;default is map left
+	ld i,map_left
+	sne v2,20
+	ld i,796
+	ld v2,v1,5
+;get row progress (offset by 1 becuase the first column is always unlocked
+;this checks if the previous column had any progress
+	ld i,progress1
+	add i,v3
+	add v3,1
+	ld v0,[i]
+;fill if needed
+	ld i,node_fill
+	se v0,0
+	drw v2,v1,4
+;loop until done
+	sne v2,32
+	jp nodes_done
+	ld 1,7
+	ld i,progress1
+	add i,v3
+	ld v0,[i]
+draw_column_loop
+;go down
+	add v1,6
+;loop until done
+	sne v1,31
+	jp node_column_done
+;draw node
+	ld i,up_node
+	drw v2,v1,6
+;if needed, fill node
+	sne v0,0
+	jp draw_column_loop
+	ld i,up_node_fill
+	drw v2,v1,5
+;subtract 1 to check if unlocked nodes remain
+	add v0,-1
+	jp draw_column_loop
+		
+nodes_done
+	ld v8,choose_boardset_text
+	call draw_text
+	ld i,889
+	ld ve,[i]
+;x position of cursor
+	ld v7,10
+choose_set_input_loop
+	call store_and_draw_set
+return_from_locked_set
+;draw cursor
+	ld i,dot
+	drw v7,vb,1
+	call wait_remaining
+;get key
+	ld v9,k
+;hide cursor
+	drw v7,vb,1
+	sne v9,menu_back_key
+	jp select_set_back
+	sne v9,select_key
+	jp select_set
+;wait 6 frames
+	ld v0,6
+	ld dt,v0
+;hide set number
+	call draw_level_num
+	ld v6,0
+	sne v9,5
+	jp select_set_move_up
+	sne v9,8
+	jp select_set_move_down
+	sne v9,9
+	jp select_set_move_right
+	se v9,move_left_key
+;otherwise, get another input
+	jp choose_set_input_loop
+;check if we are on the left
+	sne v7,10
+	jp choose_set_input_loop
+;decrement column
+	add vc,-1
+;move left
+	add v7,-6
+	ld v6,-1
+;update adress by -140*2=280
+	ld v5,-140
+	jp change_boardset_adress_twice
+select_set_move_up
+;check if we are on the top
+	sne vb,10
+	jp choose_set_input_loop
+;decrement row
+	add vd,-1
+;move up
+	add vb,-6
+	ld v6,-1
+;update adress by -70
+	ld z,-70
+	jp change_boardset_adress_once
+select_set_move_down
+;check if we are on the bottom
+	sne vb,28
+	jp choose_set_input_loop
+;check if we are on the very right
+	sne v7,34
+	jp choose_set_input_loop
+;increment row
+	add vd,1
+;move down
+	add vb,6
+;update adress by 70
+	ld v5,70
+	jp change_boardset_adress_once
+select_set_move_right
+;check if we are on the very right
+	sne v7,34
+	jp choose_set_input_loop
+;check if we are on the right edge on the bottom
+	se v7,28
+	jp cursor_not_on_very_right
+	se vb,10
+	jp choose_set_input_loop
+;increment row
+	add vb,1
+;move right
+	add v7,6
+;update adress by 140*2=280
+	ld v5,140
+change_boardset_adress_twice
+	call 36f
+change_boardset_adress_once
+	call 36f
+	jp choose_set_input_loop
+	
+draw_level_vars
+	byte 54,59 ;x position of hyphen and board num
+	byte 8 ;y position of set num or hyphen
+	byte 44,49 ;x position of both set characters
+	
+;stores and draws the set number
+store_and_draw_set
+;store current set
+	ld v0,vc
+	ld v1,vd
+	ld i,set_selected
+	ld [i],v1
+;draws the set number and board number in ve
+draw_level_num
+	ld i,draw_level_vars
+	ld v4,[i]
+;check if we need to draw set only
+	sne ve,0
+	jp draw_set_only
+;draw hyphen
+	ld i,hyphen
+	drw v0,v2,1
+;letter 2 above hyphen
+	add v2,-2
+;draw the last board as f
+	ld v0,ve
+	sne v0,10
+	ld v0,15
+;draw board number
+	ld f,v0
+	drw v1,v2,5
+draw_set_only
+;get set number
+	ld i,set_selected
+	ld v1,[i]
+;draw both characters
+	ld f,v1
+	drw v4,v2,5
+	ld f,v0
+	drw v3,v2,5
+	ret
+
+;changes adress of boardset according to selection movement
+change_boardset_adress
+	ld i,boardset_address
+	ld v1,[i]
+	ld v2,v6
+;add offset
+	add v1,v5
+;check if overflow
+	sne vf,1
+	jp addition_overflow
+;decrement high byte if minus in high byte
+	sne v6,-1
+	add v0,-1
+	jp no_addition_overflow
+addition_overflow
+;increment high byte if no minus in high byte
+	sne v6,0
+	add v0,1
+no_addition_overflow
+	ld i,boardset_address
+	ld [i],v1
+	ret
+
+select_set_back
+	call draw_sliding_block
+;beep for 1 frame
+	ld st,v9
+	ld v8,back_text
+	call draw_text
+	ld v0,45
+	call wait_amount
+;jump back to the beginning
+	jp start
+select_set
+;check collision to check if set is locked
+	sne vf,1
+	jp set_unlocked
+	call draw_sliding_block
+;beep for 10 frames
+	ld st,v9
+	ld v8,lock_text
+	call draw_text
+	ld v0,45
+	call wait_amount
+;hide lock text and sliding block
+	ld v8,lock_text
+	call draw_text
+	call draw_sliding_block
+	jp return_from_locked_set
+	
+set_unlocked
+	call draw_sliding_block
+	call accept
+game_loop
+	add ve,1
+	
+;board is drawn here
+draw_board_start
+;clear screen
+	cls
+	call draw_sliding_block
+	ld v8,wait_text
+	call draw_text
+	call draw_level_num
+;sub 1 from level
+	ld v8,ve
+	add v8,-1
+;add letter of set times 2 to get repeating pattern
+	shl v0
+	add v8,v0
+;and by 6 and multiply by 2
+	and v8,v2
+	shl v8
+;get current offsets
+	ld i,car_offset_table
+	ld v7,[i]
+;load offsets from the current options
+	ld i,car_offset_options
+	add i,v8
+	ld v3,[i]
+;copy 5th and 7th slots as they are the same
+	ld v5,v1
+	ld v7,v3
+;store offsets
+	ld i,car_offset_table
+	ld [i],v7
+;load vars
+	ld i,board_loading_vars
+	ld vc,[i]
+;clear moves
+	ld i,moves_num
+	ld [i],v1
+	ld i,moves_hundreds
+	ld [i],v1
+;boards graphic is drawn at y of 1
+	ld i,board_text_graphic
+	call draw_text_graphic
+;y position of moves graphic
+	ld v2,15
+	ld i,moves_text_graphic
+	call draw_text_graphic
+;load 0 graphic
+	ld f,vc
+draw_move_zeroes_loop
+;draw it
+	drw v3,v5,5
+;next zero
+	add v3,5
+;loop until done
+	se v3,64
+	jp draw_move_zeroes_loop
+	ld i,thin_block
+;right pillar
+	drw v4,vc,10
+	drw v4,v6,10
+	drw v4,v5,12
+;left pillar
+	drw vc,vc,10
+	drw vc,v6,10
+	drw vc,v5,12
+	ld i,block
+draw_inside_loop
+;top inside
+	drw v7,va,15
+;bottom inside
+	drw v7,v8,15
+;next inside section
+	add v7,8
+;loop until done
+	se v7,36
+	jp draw_inside_loop
+;draw car exit
+	ld i,car_exit
+	drw v4,v6,7
+	
+;start from blank car
+load_car_loop
+	ld v8,-1
+load_board_loop
+;check if we need to load a byte
+	se vb,0
+	jp dont_load_byte
+;8 bits left to process
+	ld vb,8
+boardset_address
+;load appropriate boardset (this might is changed according to boardset)
+	ld i,board_data
+;get current byte
+	add i,vc
+	ld v0,[i]
+	ld vd,v0
+dont_load_byte
+;load one byte
+	add vb,-1
+;check if right byte is 1
+	shr vd
+	sne vf,0
+	jp right_byte_zero
+;increment length
+	add v8,1
+;keep loading until 3 ones
+	se v8,3
+	jp load_board_loop
+right_byte_zero
+;no ones loaded means blank car
+	sne v8,-1
+	jp no_ones_loded
+;if car is horiz and on the third row it is a player car
+	sne va,11
+	add v8,4
+	call draw_car
+;check if car is horizontal to know if to offset
+	shr v8
+	sne vf,1
+	jp no_ones_loded
+;offset to get next cell
+	add v9,-3
+;add 1 or 2 cells depending on length
+	shr v8
+	sne vf,1
+	add v9,5
+no_ones_loded
+;next cell
+	add v9,5
+;check if reached row end
+	se v9,35
+	jp load_car_loop
+;next row
+	ld v9,5
+	add va,5
+;check if all rows done
+	se va,31
+	jp load_car_loop
+	ld i,game_vars
+	ld vd,[i]
+	jp game_start
+
+;draws a text graphic on the right side
+draw_text_graphic
+	ld v0,41
+draw_text_graphic_loop
+	drw v0,v2,4
+;next segment
+	add v0,8
+;loop until done
+	sne v0,65
+	ret
+;add 4 every time
+	add i,v7
+	jp draw_text_graphic_loop
+	
+;offsets between first and second part of horiz cars
+car_graphic_offsets
+	byte 45,31,27,36
+
+;draws the current car when loading
+draw_car
+;get graphic index
+	ld i,car_offset_table1
+	add i,v8
+	ld v1,[i]
+;shift right length to check if it is horizontal/vertical
+	ld v0,v8
+	shr v0
+	sne vf,1
+	jp draw_vertical_car
+;load appropriate offset based on the length
+	ld i,car_graphic_offsets
+	add i,v0
+	ld v0,[i]
+	ld i,car_graphics_start
+	add i,v1
+;draw one side
+	drw v9,va,5
+;get other side
+	add i,v0
+	add v9,8
+	drw v9,va,5
+draw_vertical_car
+;just draw graphic
+	ld i,car_graphics_start
+	add i,v1
+	drw v9,va,15
+	ret
+	
+;draws ok at the bottom and waits
+accept
+;beep
+	ld v0,1
+	ld st,v0
+	ld v8,ok_text
+	call draw_text
+;wait for 33 frames
+long_wait
+	ld v0,33
+;wait for frames in v0
+wait_amount
+	ld dt,v0
+;wait the remaining time in dt
+wait_remaining
+	ld v0,dt
+	se v0,0
+	jp wait_remaining
+	ret
+
+retry
+;wait for retry key release
+	sknp v5
+	jp retry
+;hide cursor
+	ld i,cursor
+	drw vb,vc,5
+	call draw_sliding_block
+	ld retry_text
+	call draw_text
+;get key
+	ld v9,k
+;hide retry text
+	ld v8,retry_text
+	call draw_text
+;check if select key pressed
+	se v9,select_key
+	jp select_key_not_pressed
+	call accept
+	jp draw_board_start
+select_key_not_pressed
+;write quit text
+	call draw_text
+	ld v9,k
+	ld v8,quit_text
+	call draw_text
+;check if select key pressed
+	se v9,select_key
+	jp game_start
+	call accept
+	jp select_set_screen
+
+game_start
+	call draw_sliding_block
+	jp process_input
+	
+move_down
+	call process_move_down
+	jp process_input
+	
+move_up_right
+	call process_move_up
+	call process_move_right
+	jp process_input
+	
+move_up_left
+	call process_move_left
+	call process_move_up
+	
+move_up
+	call process_move_up
+	jp process_input
+	
+move_down_right
+	call process_move_down
+move_right
+	call process_move_right
+;check if we solved the level
+	se vb,-1
+	jp process_input
+;increment board adress by 7
+	ld v6,0
+	ld v5,7
+	call change_boardset_adress
+;check if we completed boardset
+	se ve,10
+	jp game_loop
+;clear screen
+	cls
+	ld well_done_text
+	call draw_text
+	ld i,set_selected1
+	ld v2,[i]
+	sne v1,5
+	jp dont_write_progress
+;get progress at column
+	ld i,progress1
+	add i,v1
+;check if it is already full
+	ld v0,[i]
+	sne v0,3
+	jp dont_write_progress
+;check if we are solving the last unlocked set
+	add v2,-10
+	se v0,v2
+	jp dont_write_progress
+;write progress
+	add v0,1
+	ld i,set_selected1
+	add i,v1
+	ld [i],v0
+;draws unlock next set text
+	call draw_text
+	call d47
+	se v0,v1
+	call display_password
+dont_write_progress
+	jp return_from_password_screen
+
+move_down_left
+	call process_move_down
+move_left
+	call process_move_left
+	
+;process user input in main game
+process_input
+;draw cursor
+	ld i,cursor
+	drw vb,vc,5
+get_key_loop
+	ld i,move_vars
+	ld v6,[i]
+;check if retry key is pressed
+	sknp v5
+	jp retry
+;check if up key pressed
+	sknp v2
+	add v0,2
+;check if right key pressed
+	sknp v1
+	add v0,4
+;check if down key pressed
+	sknp v3
+	add v0,8
+;check if left key pressed
+	sknp v6
+	add v0,16
+;skip if no key pressed
+	sne v0,0
+	jp no_key_pressed
+;check if key wait timer ended
+	ld va,dt
+	se va,0
+	jp get_key_loop
+;make moves take at least 10 frames
+	ld dt,v4
+;check if we are grabbing
+	sknp v4
+	ld v5,2
+;hide cursor
+	ld i,cursor
+	drw vb,vc,2
+;check if we are grabbing a car
+	or v5,vf
+direction_table
+;jump to the appropriate direction
+	jp v0,direction_table
+	jp move_up
+	jp move_right
+	jp move_up_right
+	jp move_down
+	jp move_up
+	jp move_down_right
+	jp move_right
+	jp move_left
+	jp move_up_left
+	jp move_right
+	jp move_up_right ;should be move up
+	jp move_down_left
+	jp move_up_left
+	jp move_down_right
+	jp move_up_right
+	
+no_key_pressed
+;load delay timer
+	ld dt,v0
+	jp get_key_loop
+	
+;processes moving up only
+process_move_up
+;check if we are not on the far right
+	sne vb,35
+	ret
+;check if we are not at the top
+	sne vc,1
+	ret
+;check if we are grabbing
+	se v5,3
+	jp up_not_grabbing
+	call check_car_vert
+;check if no car (or horizontal car) was grabbed
+	sne va,v9
+	ret
+;check if space available on the top
+	ld v0,va
+	add v0,-1
+	ld i,top_car_checker
+	drw vb,v0,1
+	drw vb,v0,1
+	sne vf,1
+	ret
+	ld v9,vb
+;hide car
+	call draw_car
+;move up 5
+	ld va,-5
+	call draw_car
+	call update_score
+up_not_grabbing
+;move up
+	add vc,-5
+	ret
+
+;processes moving down only
+process_move_down
+;check if we are not on the far right
+	sne vb,35
+	ret
+;check if we are not at the bottom
+	sne vc,26
+	ret
+;check if we are grabbing
+	se v5,3
+	jp down_not_grabbing
+	call check_car_vert
+;check if no car (or horizontal car) was grabbed
+	sne va,v9
+	ret
+;check if space available on the bottom
+	add v9,5
+	ld i,left_car_checker
+	drw vb,v9,1
+	drw vb,v9,1
+	sne vf,1
+	ret
+	ld v9,vb
+;hide car
+	call draw_car
+;move down 5
+	ld va,5
+	call draw_car
+	call update_score
+down_not_grabbing
+;move down
+	add vc,5
+	ret
+
+;processes moving left only
+process_move_left
+;check if we are on left edge
+	sne vb,5
+	ret
+;check if we are grabbing
+	se v5,3
+	jp left_not_grabbing
+	call check_car_horiz
+;check if no car (or vertical car) was grabbed
+	sne v9,v6
+	ret
+;check if space available on the left
+	ld v0,v9
+	add v0,-1
+	ld i,left_car_checker
+	drw v0,vc,3
+	drw v0,vc,3
+	sne vf,1
+	ret
+	ld va,vc
+;hide car
+	call draw_car
+;move left 5 plus 8 from drawing the car
+	add v9,-13
+;redraw car
+	call draw_car
+	call update_moves
+left_not_grabbing
+	add vb,-5
+	ret
+
+on_right_edge
+;check if we are on the third row
+	sne vc,11
+	jp return_from_right_edge
+	ret
+
+;processes moving right only
+process_move_right
+;check if we are on right edge
+	sne vb,30
+	jp on_right_edge
+;check if we are on the far right
+	sne vb,35
+	ret
+return_from_right_edge
+;check if we are grabbing
+	sne v5,3
+	jp right_not_grabbing
+	call check_car_horiz
+;check if no car (or vertical car) was grabbed
+	sne v9,v6
+	ret
+;check if space available on the right
+	add v6,5
+	ld i,left_car_checker
+	drw v6,vc,3
+	drw v6,vc,3
+	sne vf,1
+	ret
+	ld va,vc
+;hide car
+	call draw_car
+;move right 5 minus 8 from drawing the car
+	add v9,-3
+;redraw car
+	call draw_car
+	call update_moves
+;check if reached right side
+	sne v6,35
+	jp game_win
+right_not_grabbing
+;move right
+	add vb,5
+	ret
+	
+game_win
+	add vb,5
+	ld v6,vb
+	ld vb,v9
+;check if car behind blayer
+	add vb,-13
+check_left_loop
+	ld i,top_car_checker
+	drw vb,vc,1
+	drw vb,vc,1
+	sne vf,0
+	jp no_car_behind_player
+;check bottom as well?? 
+	ld i,bottom_car_checker
+	ld i,bottom_car_checker
+	drw vb,vc,5
+	drw vb,vc,5
+	sne vf,0
+	jp car_behind_player
+no_car_behind_player
+;check if we are checking the far left side
+	sne vb,5
+	jp stop_checking_empty
+;keep checking left
+	add vb,-5
+	jp check_left_loop
+	ld v7,v8
+	call draw_sliding_block
+	ld v8,nice_Text
+	call draw_text
+	ld va,11
+;load current car
+	ld v8,v7
+;no idea why this is set as it is cleared immediately
+	ld v6,-1
+;count flashes
+	ld v3,0
+;mark level complete
+	ld vb,v6
+;beep and wait for 11 frames
+	ld v2,11
+	ld st,v2
+	ld dt,v2
+flash_car_loop
+;make sure drawing occurs in correct place
+	add v9,-5
+	call draw_car
+	add v3,1
+	call wait_remaining
+;flash 11 times
+	se v3,11
+	jp flash_car_loop
+	ret
+	
+;target for bcd operations
+bcd_target
+	pad 1
+;number of moves and also vars to initiate moves updating
+moves_num
+	pad 2 ;tens and units digit go here
+	byte 54,59 ;x position of tens and units digit
+	byte 20 ;y position of digits
+;targets for bcd for hundreds digit
+hundreds_bcd_target
+	pad 1
+moves_hundreds
+	pad 2
+	byte 44,49 ;x position of thousands and hundreds digit
+	
+;updates and draws the moves counter
+update_moves
+	ld i,moves_num
+	ld v4,[i]
+;beep for 3 frames because we are grabbing
+	ld st,v5
+;register move
+	add vd,1
+;store new bcd
+	ld i,bcd_target
+	bcd vd
+;check tens overflow
+	sne v1,9
+	jp tens_overflow
+;hide digit
+	ld f,v1
+	drw v3,v4,5
+;increment digit
+	add v1,1
+;redraw digit
+	ld f,v1
+	drw v3,v4,5
+	ret
+tens_overflow
+;hide tens and units digits
+	ld f,v0
+	drw v2,v4,5
+	ld f,v1
+	drw v3,v4,5
+;load new digits
+	ld i,moves_num
+	ld v1,[i]
+;draw new digits
+	ld f,v0
+	drw v2,v4,5
+	ld f,v1
+	drw v3,v4,5
+;check hundreds overflow
+	sne vd,100
+	jp hundreds_overflow
+	ret
+	
+hundreds_overflow
+	ld i,moves_hundreds
+	ld v3,[i]
+;reset units digit
+	ld vd,0
+	add v7,1
+	sne v7,100
+	ld v7,0
+;get hundreds digits
+	ld i,hundreds_bcd_target
+	bcd v7
+;hide thousands and hundreds digits
+	ld f,v0
+	drw v2,v4,5
+	ld f,v1
+	drw v3,v4,5
+	ld i,moves_hundreds
+;get new digits
+	ld v1,[i]
+	ld f,v0
+;draw new digits
+	ld f,v0
+	drw v2,v4,5
+	ld f,v1
+	drw v3,v4,5
+	ret
+
+check_car_vert
+;init vertical car
+	ld v8,1
+;initialize both check positions
+	ld va,vc
+	ld v9,vc
+;check bottom side of cursor
+	ld i,top_car_checker
+	drw vb,v9,5
+	drw vb,v9,5
+	sne vf,1
+	jp bottom_collision_detected
+;check bottom side of cell on the bottom
+	add v9,5
+	drw vb,v9,5
+	drw vb,v9,5
+	sne vf,1
+	jp bottom_collision_detected
+;mark bottom side
+	add v9,5
+;mark long car
+	add v8,2
+	ret
+bottom_collision_detected
+;check left side of cursor
+	ld i,top_car_checker
+	drw vb,va,1
+	drw vb,va,1
+	sne vf,1
+	jp top_collision_detected
+;check top side of cell on the top
+	add va,-5
+	ld i,top_car_checker
+	drw vb,va,1
+	drw vb,va,1
+	sne vf,1
+	jp top_collision_detected
+;mark top side
+	add va,-5
+;mark long car
+	add v8,2
+	ret
+;get length of car
+	ld v0,v9
+	sub v0,va
+;mark long car if needed
+	sne v0,10
+	add v8,2
+	ret
+	
+;checks length of grabbed car in horizontal direction
+check_car_horiz
+;init horizontal car
+	ld v8,0
+;check if we are grabbing on 3rd row (player row)
+	sne vc,11
+	add v8,4
+;initialize both check positions
+	ld v9,vb
+	ld v6,vb
+;check right side of cursor
+	ld i,right_car_checker
+	drw v6,vc,3
+	drw v6,vc,3
+	sne vf,1
+	jp right_collision_detected
+;check right side of cell on the right
+	add v6,5
+	drw v6,vc,3
+	drw v6,vc,3
+	sne vf,1
+	jp right_collision_detected
+;mark right side
+	add v6,5
+;mark long car
+	add v8,2
+	ret
+right_collision_detected
+;check left side of cursor
+	ld i,left_car_checker
+	drw v9,vc,3
+	drw v9,vc,3
+	sne vf,1
+	jp left_collision_detected
+;check left side of cell on the left
+	add v9,-5
+	drw v9,vc,3
+	drw v9,vc,3
+	sne vf,1
+	jp left_collision_detected
+;mark left side
+	add v9,-5
+;mark long car
+	add v8,2
+	ret
+left_collision_detected
+;get length of car
+	ld v0,v6
+	sub v0,v9
+;mark long car if needed
+	sne v0,10
+	add v8,2
+	ret
+
+car_exit
+;left bar is needed becuase there is a border there
+	byte %11.1....
+dot
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %11.1....
+	
+map_up
+	byte %..1.....
+map_end
+	byte %11111...
+	byte %1...1...
+	byte %1...1...
+	byte %1...1...
+	
+map_left
+	byte %11111...
+	byte %1...1...
+	byte %1...11..
+	byte %1...1...
+;long vert car 1 0
+car_graphics_start
+	byte %11111...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+
+thin_block
+;can be drawn at various heights
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %11111...
+;long vert car 2 25
+	byte %11111...
+	byte %1...1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1...1...
+	byte %1...1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1...1...
+	byte %1...1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1...1...
+;long vert car 3 39
+	byte %11111...
+	byte %1...1...
+	byte %11..1...
+	byte %1.1.1...
+	byte %1..11...
+	byte %1...1...
+	byte %11..1...
+	byte %1.1.1...
+	byte %1..11...
+	byte %1...1...
+	byte %11..1...
+	byte %1.1.1...
+	byte %1..11...
+	byte %1...1...
+;short vert car 1 53
+	byte %11111...
+	byte %1...1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1...1...
+	byte %1...1...
+	byte %1.1.1...
+	byte %1.1.1...
+	byte %1...1...
+	byte %11111...
+;padding because every graphic is 15 tall
+	pad 3
+board_loading_vars
+	byte 0,0
+	byte 1 ;y position of board text
+	byte 44 ;x position of moves text
+;the vars to start the game
+game_vars
+	byte 35 ;x position of right pillar/car exit
+	byte 20 ;y position of moves text and bottom section of pillars
+	byte 10 ;y position of middle section of pillars/car exit
+	byte 4 ;increment by 4 after drawing text/x position of inside
+	byte 16 ;y position of second inside section
+	byte 5 ;x of first cell 
+	byte 1 ;y position of first inside section and first cell
+	byte 0
+set_selected1
+	byte 0 ;initially draw zeros in moves (and 0 x/y position of pillars)
+	;also wait text
+;the current set we are selecting
+set_selected
+	pad 2
+	
+	byte 5 ;x of cursor
+	byte 1 ;y of cursor
+;the variables to check for movement
+move_vars
+	byte 0
+	byte move_right_key
+	byte move_up_key
+	byte move_down_key
+	byte select_key ;also used for time between key processing
+	byte retry_key
+
+;7f7
+;variables to initialize select set screen
+select_set_init_vars
+	byte move_left_key,20 ;y positions of map background segments (also 7 is left key)
+	byte 20,0 ;column position/index
+	;initial y/x position of blocks shared with node fill
+	
+up_node_fill
+	byte %........
+node_fill
+	byte %........
+	byte %.111....
+	byte %.111....
+;bottom byte shared with cursor
+cursor
+	byte %.111....
+	byte %11111...
+	byte %11111...
+	byte %11111...
+;803
+;stores how far we are in every column 0-unlockes x-x down plus 1
+;offset by 1
+progress1
+	byte %.111....
+progress
+	pad 4
+
+;short vert car 2 106
+	byte %11111...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11.11...
+	byte %11111...
+	byte %........
+;pixels that check if we are grabbing a car
+bottom_car_checker
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+top_car_checker
+	byte %..1.....
+
+left_car_checker
+	byte %........
+	byte %........
+	byte %1.......
+right_car_checker
+	byte %........
+	byte %........
+	byte %....1...
+	
+;long horiz car 1 128
+	byte %11111111
+	byte %1...1...
+	byte %1..1...1
+	byte %1.1...1.
+;short horiz car 1/long horiz car 2 132
+	byte %11111111
+	byte %1.......
+	byte %1.11..11
+	byte %1.......
+;short horiz car 2/long horiz car 3 136
+	byte %11111111
+	byte %11111111
+	byte %1.......
+block
+;can be drawn at various heights
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+;838
+;short player car 154
+	byte %111111.1
+	byte %111111..
+	byte %1.......
+	byte %111111..
+	byte %111111.1
+;long horiz car 1 end
+	byte %1111111.
+	byte %1...1.1.
+	byte %...1..1.
+	byte %..1...1.
+;long horiz car 2 end
+	byte %1111111.
+	byte %......1.
+	byte %1..11.1.
+	byte %......1.
+;long horiz car 3 end
+	byte %1111111.
+	byte %1111111.
+	byte %......1.
+	byte %1111111.
+;long player car end
+	byte %1111111.
+	byte %111.111.
+	byte %111..11.
+	byte %......1.
+	byte %111..11.
+	byte %111.111.
+;horiz car 1 end
+	byte %11......
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	byte %11......
+;horiz car 2/short player end
+	byte %11......
+	byte %11......
+	byte %.1......
+	byte %11......
+	byte %11......
+board_text_graphic
+	byte %1.....11
+	byte %111..1..
+	byte %1..1.1..
+	byte %111...11
+	
+	byte %..11..11
+	byte %1...1.1.
+	byte %1.1.1.1.
+	byte %...11.1.
+	
+	byte %....1...
+	byte %..111...
+	byte %.1..1...
+;last byte shared with sliding block
+sliding_block_end
+	byte %..111...
+	byte %..111...
+	byte %..111...
+	byte %..111...
+	byte %..111...
+	byte %..111...
+
+moves_text_graphic
+	byte %1111...1
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %1.1.1..1
+	
+	byte %1..1.1..
+	byte %.1.1.1.1
+	byte %.1..1..1
+	byte %1...1...
+	
+	byte %1...11..
+	byte %.1.1....
+	byte %.....1..
+	byte %11.11...
+
+rush_hour_logo
+;r 0
+	byte %111111..
+	byte %111..11.
+	byte %111..11.
+	byte %111..1..
+	byte %11111...
+	byte %111.11..
+;h 6
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %1111111.
+;u 10
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+;s 16
+	byte %.11111..
+	byte %111..11.
+	byte %111.....
+	byte %.11111..
+select_set_vars
+	byte %.....11.
+	byte %111..11.
+;o 22
+	byte %.11111..
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %111..11.
+	byte %.11111..
+;variables for select set
+;offset so that high regs are used
+default_boardset_address
+	byte #a8,#a1 ;default adress of boardset
+	byte 10 ;y of cursor
+	byte 1,10 ;current board (in hex 1,a)
+
+;initial variables in logo
+logo_vars
+	byte 10 ;not used because of temp
+;each pair is left letter, offset to right letter (from left)
+logo_params
+	byte 0,0 ;offset of right letter/pair count
+	byte 10,0 ;wait time/x of left letter
+	byte 16,6
+	byte 6,0 
+	byte 57,1 ;x of right letter/y of letters
+
+board_data
+;every level is 7 bytes
+;goes through every row top to bottom from left to right
+;0-empty 10-horiz car 110-vert car 1110-long horiz car 1111-long vert car
+;player is only horiz car on 3rd row
+;bytes are processed from least to most significant
+	byte #e1,#9f,#47,#00,#86,#38,#00 ;level 1A-1
+	byte #e3,#30,#1f,#73,#60,#4a,#00 ;level 1A-2
+	byte #00,#a0,#47,#bc,#01,#01,#00 ;level 1A-3
+	byte #cf,#03,#08,#ec,#c0,#38,#00 ;level 1A-4
+	byte #79,#7b,#3c,#31,#c7,#10,#04 ;level 1A-5
+	byte #19,#f1,#af,#a7,#61,#00,#07 ;level 1A-6
+	byte #d6,#86,#21,#46,#60,#00,#00 ;level 1A-7
+	byte #e8,#69,#da,#88,#da,#e5,#00 ;level 1A-8
+	byte #56,#58,#f1,#fb,#83,#31,#00 ;level 1A-9
+	byte #4d,#e1,#3f,#38,#b0,#22,#00 ;level 1A-F
+	byte #df,#03,#08,#ec,#c0,#38,#00 ;level 1B-1
+	byte #8b,#e7,#11,#e0,#60,#0e,#00 ;level 1B-2
+	byte #35,#8c,#37,#79,#82,#25,#01 ;level 1B-3
+	byte #0d,#d0,#d6,#46,#30,#05,#00 ;level 1B-4
+	byte #4a,#fd,#ff,#07,#1b,#90,#02 ;level 1B-5
+	byte #b5,#9f,#b0,#0f,#0e,#08,#00 ;level 1B-6
+	byte #3b,#a8,#86,#3c,#67,#3b,#00 ;level 1B-7
+	byte #ed,#09,#3e,#38,#84,#03,#00 ;level 1B-8
+	byte #2c,#30,#16,#34,#0e,#00,#00 ;level 1B-9
+	byte #e3,#34,#1a,#0f,#b0,#e0,#00 ;level 1B-F
+	byte #ed,#79,#20,#38,#00,#1c,#00 ;level 1C-1
+	byte #ec,#c6,#27,#18,#4d,#e6,#00 ;level 1C-2
+	byte #dc,#b3,#20,#6c,#41,#1c,#00 ;level 1C-3
+	byte #2c,#06,#d3,#08,#67,#02,#00 ;level 1C-4
+	byte #4d,#e1,#3f,#e3,#30,#0b,#02 ;level 1C-5
+	byte #e6,#c6,#9e,#d8,#0e,#c6,#10 ;level 1C-6
+	byte #eb,#11,#1a,#8f,#30,#e0,#00 ;level 1C-7
+	byte #37,#78,#05,#9b,#9e,#53,#00 ;level 1C-8
+	byte #e7,#31,#84,#ad,#68,#76,#00 ;level 1C-9
+	byte #6f,#87,#21,#94,#07,#0a,#00 ;level 1C-F
+	byte #39,#ac,#c5,#f3,#09,#70,#00 ;level 1D-1
+	byte #fd,#02,#82,#d5,#63,#04,#00 ;level 1D-2
+	byte #f6,#02,#82,#d5,#6b,#73,#00 ;level 1D-3
+	byte #e3,#30,#1f,#73,#83,#29,#01 ;level 1D-4
+	byte #7c,#8f,#11,#ec,#d0,#26,#00 ;level 1D-5
+	byte #7f,#59,#9e,#b8,#c1,#14,#00 ;level 1D-6
+	byte #4d,#f1,#ff,#c1,#81,#15,#01 ;level 1D-7
+	byte #e3,#34,#1a,#8f,#b0,#e0,#00 ;level 1D-8
+	byte #ec,#30,#1a,#9f,#6c,#41,#00 ;level 1D-9
+	byte #9f,#b1,#f1,#c8,#0d,#a6,#04 ;level 1D-F
+	byte #7a,#c0,#2f,#f0,#01,#10,#00 ;level 2A-1
+	byte #ec,#f0,#09,#46,#93,#39,#00 ;level 2A-2
+	byte #0d,#a6,#7f,#61,#c1,#56,#00 ;level 2A-3
+	byte #f7,#1b,#43,#4c,#d9,#08,#0e ;level 2A-4
+	byte #e6,#9e,#8d,#a0,#9e,#25,#00 ;level 2A-5
+	byte #ec,#62,#16,#6c,#3d,#e2,#00 ;level 2A-6
+	byte #67,#db,#c1,#b7,#00,#eb,#00 ;level 2A-7
+	byte #ea,#0f,#2c,#59,#07,#0a,#00 ;level 2A-8
+	byte #de,#1a,#36,#62,#cd,#18,#70 ;level 2A-9
+	byte #5a,#62,#7c,#c2,#0f,#28,#00 ;level 2A-F
+	byte #6d,#0c,#69,#d3,#80,#d6,#01 ;level 2B-1
+	byte #f6,#82,#d2,#ef,#d0,#80,#00 ;level 2B-2
+	byte #eb,#07,#68,#30,#c7,#5a,#00 ;level 2B-3
+	byte #73,#03,#fa,#6d,#c1,#e6,#28 ;level 2B-4
+	byte #bb,#e7,#68,#03,#e2,#86,#00 ;level 2B-5
+	byte #bf,#f5,#30,#1a,#4c,#18,#07 ;level 2B-6
+	byte #0d,#3f,#fe,#09,#07,#56,#04 ;level 2B-7
+	byte #df,#c6,#f0,#c8,#0d,#a6,#04 ;level 2B-8
+	byte #4b,#ea,#63,#2c,#d8,#0a,#00 ;level 2B-9
+	byte #d6,#30,#16,#b4,#7e,#84,#03 ;level 2B-F
+	byte #6b,#de,#80,#a6,#1f,#50,#02 ;level 2C-1
+	byte #d3,#73,#b4,#01,#71,#e3,#00 ;level 2C-2
+	byte #56,#64,#6d,#40,#d3,#e6,#00 ;level 2C-3
+	byte #6b,#81,#b5,#64,#2d,#e0,#00 ;level 2C-4
+	byte #2b,#ec,#f2,#b6,#8c,#61,#1c ;level 2C-5
+	byte #bf,#1b,#3c,#b1,#06,#1c,#05 ;level 2C-6
+	byte #b7,#11,#be,#c1,#84,#76,#00 ;level 2C-7
+	byte #6a,#6c,#84,#7f,#0b,#a2,#03 ;level 2C-8
+	byte #3b,#d8,#17,#d6,#60,#18,#07 ;level 2C-9
+	byte #5b,#1e,#e8,#93,#35,#8c,#03 ;level 2C-F
+	byte #5b,#f1,#4a,#9f,#b1,#80,#03 ;level 2D-1
+	byte #56,#ac,#0f,#be,#01,#39,#00 ;level 2D-2
+	byte #f3,#82,#7d,#60,#67,#2c,#01 ;level 2D-3
+	byte #2e,#d6,#92,#b5,#bd,#d0,#01 ;level 2D-4
+	byte #b7,#2d,#c8,#58,#62,#2d,#00 ;level 2D-5
+	byte #0a,#3f,#82,#ac,#c5,#1c,#00 ;level 2D-6
+	byte #dc,#33,#20,#6d,#6c,#c4,#01 ;level 2D-7
+	byte #56,#58,#f1,#fe,#3c,#03,#02 ;level 2D-8
+	byte #4d,#50,#63,#4f,#34,#13,#00 ;level 2D-9
+	byte #37,#cf,#90,#58,#cd,#04,#01 ;level 2D-F
+	byte #6f,#0d,#71,#bf,#0c,#03,#1c ;level 3A-1
+	byte #3f,#42,#ef,#a6,#0d,#48,#01 ;level 3A-2
+	byte #dc,#f3,#c9,#80,#dc,#38,#00 ;level 3A-3
+	byte #ee,#47,#34,#fe,#89,#1d,#0a ;level 3A-4
+	byte #f8,#c0,#1f,#66,#01,#0e,#00 ;level 3A-5
+	byte #c7,#1f,#fe,#b0,#62,#2b,#00 ;level 3A-6
+	byte #bb,#bd,#83,#25,#0f,#74,#00 ;level 3A-7
+	byte #be,#46,#cf,#59,#83,#29,#01 ;level 3A-8
+	byte #c7,#03,#87,#6d,#87,#25,#00 ;level 3A-9
+	byte #e6,#b0,#f7,#c1,#79,#06,#04 ;level 3A-F
+	byte #ac,#61,#73,#ec,#8b,#11,#04 ;level 3B-1
+	byte #6d,#0c,#71,#3b,#2f,#ac,#00 ;level 3B-2
+	byte #df,#19,#9e,#e6,#c0,#2e,#02 ;level 3B-3
+	byte #ec,#b2,#ff,#0f,#3e,#00,#0a ;level 3B-4
+	byte #f8,#62,#0e,#ac,#1f,#e0,#00 ;level 3B-5
+	byte #56,#dc,#ff,#a1,#b0,#15,#00 ;level 3B-6
+	byte #7f,#5e,#d0,#e8,#81,#e0,#00 ;level 3B-7
+	byte #fc,#61,#05,#d3,#de,#d1,#01 ;level 3B-8
+	byte #66,#41,#7f,#23,#9e,#25,#00 ;level 3B-9
+	byte #ed,#79,#20,#e0,#ce,#76,#00 ;level 3B-F
+	byte #e9,#6b,#6e,#3c,#52,#5c,#00 ;level 3C-1
+	byte #bf,#1b,#3d,#b1,#06,#9c,#03 ;level 3C-2
+	byte #3f,#0b,#70,#d3,#78,#a4,#03 ;level 3C-3
+	byte #d6,#86,#71,#ac,#65,#0c,#01 ;level 3C-4
+	byte #bb,#e7,#68,#03,#e2,#c6,#01 ;level 3C-5
+	byte #eb,#37,#86,#d8,#3b,#38,#38 ;level 3C-6
+	byte #bf,#83,#3d,#f1,#04,#4b,#04 ;level 3C-7
+	byte #4d,#e1,#3f,#e3,#c0,#8a,#00 ;level 3C-8
+	byte #67,#db,#c1,#5a,#1e,#e8,#00 ;level 3C-9
+	byte #dd,#cf,#51,#9a,#c6,#e9,#00 ;level 3C-F
+	byte #dc,#b3,#e4,#f9,#00,#e1,#00 ;level 3D-1
+	byte #37,#bf,#c0,#27,#c0,#71,#00 ;level 3D-2
+	byte #ac,#c1,#bb,#f9,#0f,#26,#14 ;level 3D-3
+	byte #d3,#c6,#80,#76,#0f,#53,#00 ;level 3D-4
+	byte #ce,#63,#13,#ac,#b0,#15,#00 ;level 3D-5
+	byte #bd,#3d,#80,#e0,#5b,#10,#00 ;level 3D-6
+	byte #b5,#05,#4f,#e3,#b0,#15,#00 ;level 3D-7
+	byte #bf,#a2,#a7,#71,#3c,#0b,#02 ;level 3D-8
+	byte #37,#bf,#c0,#07,#0b,#50,#00 ;level 3D-9
+	byte #b7,#ff,#05,#a2,#c1,#84,#02 ;level 3D-F
+	byte #ec,#c6,#27,#2c,#63,#19,#07 ;level 4A-1
+	byte #33,#c1,#be,#21,#b9,#21,#01 ;level 4A-2
+	byte #b7,#5f,#f0,#32,#80,#5d,#04 ;level 4A-3
+	byte #b3,#1e,#59,#03,#ca,#88,#00 ;level 4A-4
+	byte #56,#0f,#2f,#28,#6c,#05,#00 ;level 4A-5
+	byte #b6,#43,#6b,#c8,#6f,#0b,#10 ;level 4A-6
+	byte #37,#6b,#08,#1b,#a0,#00,#00 ;level 4A-7
+	byte #cf,#02,#b4,#39,#de,#16,#00 ;level 4A-8
+	byte #d7,#7f,#43,#60,#6b,#40,#01 ;level 4A-9
+	byte #7e,#1a,#3d,#d1,#06,#a4,#00 ;level 4A-F
+	byte #4d,#0f,#4f,#e3,#c0,#0a,#00 ;level 4B-1
+	byte #3b,#d8,#17,#18,#d1,#76,#00 ;level 4B-2
+	byte #6f,#87,#a6,#4d,#80,#05,#01 ;level 4B-3
+	byte #5b,#31,#3e,#a6,#c0,#12,#00 ;level 4B-4
+	byte #67,#03,#3e,#66,#87,#ad,#08 ;level 4B-5
+	byte #76,#1b,#43,#de,#0e,#c6,#10 ;level 4B-6
+	byte #f9,#01,#3e,#b0,#43,#3b,#00 ;level 4B-7
+	byte #19,#8b,#e7,#13,#e0,#38,#00 ;level 4B-8
+	byte #ec,#f2,#b3,#00,#95,#15,#00 ;level 4B-9
+	byte #59,#43,#1a,#33,#1e,#29,#00 ;level 4B-F
+	byte #9a,#df,#80,#66,#0d,#26,#1c ;level 4C-1
+	byte #56,#58,#1f,#9c,#67,#09,#00 ;level 4C-2
+	byte #37,#16,#b4,#7d,#03,#a2,#00 ;level 4C-3
+	byte #03,#ee,#bf,#8d,#00,#4b,#00 ;level 4C-4
+	byte #df,#30,#a2,#69,#3c,#52,#00 ;level 4C-5
+	byte #56,#af,#7f,#c2,#c1,#06,#04 ;level 4C-6
+	byte #56,#58,#b1,#ff,#83,#05,#01 ;level 4C-7
+	byte #76,#83,#f9,#18,#0b,#d6,#01 ;level 4C-8
+	byte #df,#92,#a7,#d1,#80,#a6,#00 ;level 4C-9
+	byte #bf,#c2,#9e,#d0,#78,#44,#01 ;level 4C-F
+	byte #b5,#01,#68,#ef,#b0,#05,#01 ;level 4D-1
+	byte #5b,#f1,#0a,#32,#bf,#e0,#00 ;level 4D-2
+	byte #fc,#82,#09,#56,#af,#71,#00 ;level 4D-3
+	byte #58,#3f,#86,#bc,#c2,#12,#01 ;level 4D-4
+	byte #2d,#f1,#3e,#e6,#c0,#88,#00 ;level 4D-5
+	byte #ec,#60,#34,#1a,#6f,#c2,#01 ;level 4D-6
+	byte #dc,#b3,#8c,#b0,#05,#71,#00 ;level 4D-7
+	byte #76,#03,#b4,#7d,#8f,#11,#1c ;level 4D-8
+	byte #6b,#f1,#7c,#80,#60,#1d,#00 ;level 4D-9
+	byte #4d,#f1,#5e,#38,#c3,#88,#00 ;level 4D-F
+	byte #3c,#80,#f0,#07,#04,#07,#00 ;level 5A-1
+	byte #bd,#07,#04,#80,#05,#00,#00 ;level 5A-2
+	byte #c7,#33,#24,#ef,#01,#e0,#00 ;level 5A-3
+	byte #df,#07,#26,#34,#86,#1c,#00 ;level 5A-4
+	byte #73,#90,#db,#34,#1e,#39,#00 ;level 5A-5
+	byte #eb,#87,#21,#8c,#8f,#61,#08 ;level 5A-6
+	byte #b5,#27,#f8,#60,#6c,#44,#01 ;level 5A-7
+	byte #bf,#f5,#80,#36,#0d,#b8,#0e ;level 5A-8
+	byte #fe,#36,#3c,#f2,#0d,#08,#07 ;level 5A-9
+	byte #37,#de,#60,#7a,#62,#c1,#05 ;level 5A-F
+;no idea what this does (check reading from memory???)	
+d47
+	ld i,#ef0
+	ld v0,[i]
+	add v0,1
+	ld v1,v0
+	ld i,#ef0
+	ld v0,[i]
+	ret
+
+;draw sliding block on bottom right
+draw_sliding_block
+;position of block
+	ld v2,59
+	ld v1,26
+	ld i,thin_block
+draw_sliding_block_loop
+;2 frames per segment
+	ld v0,2
+	ld dt,v0
+;draw segment
+	drw v2,v1,6
+;go left to the next block
+	add v2,-5
+;loop until done
+	se v2,39
+	jp draw_sliding_block_loop
+;draw end
+	ld i,sliding_block_end
+	drw v2,v1,6
+	ret
+
+;d6f
+letter_graphics
+;last 3 bytes are width
+	byte %1.....1. ;' 0
+	byte %......1. ;_ 1
+	byte %......1. ;. 2
+	byte %......11 ;, 3
+	byte %........
+	byte %.1......
+	byte %1....1.. ;h 6
+	byte %11...1.. ;n 7
+	byte %1.1..1.. ;u 8
+	byte %1.1.....
+	byte %1.1.....
+	byte %.11..1.. ;? b
+	byte %1.1.....
+	byte %......1. ;: d
+	byte %.1....11 ;j e
+	byte %........
+	byte %.1......
+	byte %1.....1. ;! 11
+	byte %1.....1. ;i 12
+	byte %........
+	byte %1.......
+	byte %1....1.1 ;b 15
+	byte %111..1.1 ;p 16
+	byte %1..1....
+	byte %111.....
+	byte %1....1.. ;k 19
+	byte %1.1.....
+	byte %11......
+	byte %1.1..1.. ;v 1c
+	byte %1.1..1.. ;x 1d
+	byte %.1......
+	byte %.1......
+	byte %1.1..1.. ;y 20
+	byte %1.1.....
+	byte %.1......
+	byte %1.......
+	byte %.1...1.. ;g 24
+	byte %1.1.....
+	byte %..1.....
+	byte %11....11 ;r 27
+	byte %1.....11 ;l 28
+	byte %1.......
+	byte %1.......
+	byte %.1....11 ;f 2b
+	byte %1.....11 ;t 2c
+	byte %11......
+	byte %1.......
+	byte %.1...1.. ;e 2f
+	byte %1.1.....
+	byte %1.......
+	byte %.11..1.. ;c 32
+	byte %1.......
+	byte %1.......
+	byte %.11..1.1 ;o 35
+	byte %1..1....
+	byte %1..1....
+	byte %.11..1.. ;s 38
+	byte %1.......
+	byte %..1.....
+	byte %11...1.. ;a 3b
+	byte %..1.....
+	byte %1.1.....
+	byte %.11.....
+	byte %111..1.. ;z 3f
+	byte %..1.....
+	byte %1.......
+	byte %111.....
+	byte %...1.1.1 ;d 43
+	byte %.111.1.1 ;q 44
+	byte %1..1....
+	byte %.111....
+	byte %...1....
+	byte %1111.11. ;m 48
+	byte %1.1.1...
+	byte %1.1.111. ;w 4a
+	byte %1.1.1...
+	byte %.1.1....
+	byte %.1.1....
+	
+;draws a text with index at v8 from the text table and wait 2 frames between text
+draw_text
+	ld i,text_table_minus_4
+	add i,v8
+;get position
+	ld v5,[i]
+;draw text with position stored at v4 and v5
+draw_text_at_position
+;start reading string 2 after
+	add v8,2
+;mask to and letter by
+	ld va,%11111...
+;wait 2 frames for every frame
+	ld v6,2
+	ld dt,v6
+;get letter
+	ld i,text_table
+	add i,v8
+;increment letter
+	add v8,1
+;check if the letter is -1, end
+	ld v0,[i]
+	sne v0,-1
+	ret
+;load letter
+	ld i,letter_graphics
+	add i,v0
+	ld v3,[i]
+;remember first byte to get difference
+	ld v6,v0
+;remove 3 right columns from letter
+	and v0,va
+	and v1,va
+	and v2,va
+	and v3,va
+;store in buffer
+	ld i,temp
+	ld [i],v3
+	ld i,temp
+;draw graphic
+	drw v4,v5,4
+;get x offset by subtracting first byte with mask
+	add v4,v6
+	sub v4,v0
+;adress for getting position
+text_table_minus_4
+	call wait_remaining
+;loop until entire sting written
+	jp draw_text_loop
+	
+;first 2 characters are position, letters are according to constants
+;terminator is -1
+text_table
+;wait...
+	byte 42,27,#4a,#3b,#12,#2c,#02,#02,#02,-1
+;nice!
+	byte 45,37,#07,#12,#32,#2f,#11,-1
+;retry?
+	byte 42,27,#27,#2f,#2c,#27,#20,#0b,-1
+;quit?
+	byte 42,27,#44,#08,#12,#2c,#0b,-1
+;ok
+	byte 48,27,#35,#19,-1
+;lock
+	byte 45,27,#28,#35,#32,#19,-1
+;back
+	byte 46,27,#15,#3b,#32,#19,-1
+;choose boardset
+	byte 02,01,#32,#06,#35,#35,#38,#2f,#01,#15,#35,#3b,#27,#43,#38,#2f,#2c,-1
+;traffic jam puzzle
+	byte 01,10,#2c,#27,#3b,#2b,#2b,#12,#32,#01
+	byte #0e,#3b,#48,#01,#16,#08,#3f,#3f,#28,#2f,-1
+;press a key
+	byte 12,24,#16,#27,#2f,#38,#38,#01,#3b,#01,#19,#2f,#20,-1
+;well done!
+	byte 13,03,#4a,#2f,#28,#28,#01,#43,#35,#07,#2f,#11,-1
+;unlocked next set
+	byte 01,10,#08,#07,#28,#35,#32,#19,#2f,#43,#01
+	byte #07,#2f,#1d,#2c,#01,#38,#2f,#2c,-1
+;password:
+	byte 2,17,#16,#3b,#38,#38,#4a,#35,#27,#43,#0d,-1
+;no
+	byte 48,27,#07,#35,-1
+;play
+	byte 24,18,#16,#28,#3b,#20,-1
+;unlock
+	byte 20,24,#08,#07,#28,#35,#32,#19,-1
+;orig: nob,thinkfun
+	byte 01,10,#35,#27,#12,#24,#0d,#01,#07,#35,#15,#03
+	byte #2c,#06,#12,#07,#19,#2b,#08,#07,-1
+;for 'chip' by hap.
+	byte 02,17,#2b,#35,#27,#01,#00,#32,#06,#12,#16,#00,#01
+	byte #15,#20,#01,#06,#3b,#16,#02,-1
+	
+;calculates and displays the password
+display_password
+	ld v0,password_text
+;wait 19 frames
+	call wait_amount
+	call draw_text
+;load progress
+	ld i,progress
+	ld v3,[i]
+;get first combined byte
+	shl v0
+	shl v0
+	or v0,v1
+;get second combined byte
+	shl v3
+	shl v3
+	or v3,v2
+;get xor masks
+	ld v1,%1.1.
+	ld v2,%.1.1
+;mask by outer characters
+	xor v2,v0
+	xor v1,v3
+;store in buffer
+	ld i,temp
+	ld [i],v3
+;position of characters
+	ld v3,43
+	ld v1,16
+;count characters printed
+	ld v2,0
+display_password_loop
+;get character
+	ld i,temp
+	add i,v2
+	ld v0,[i]
+	ld f,v0
+;wait 17 frames between characters
+	ld v0,17
+	call draw_amount
+	drw v3,v1,5
+;next character
+	add v3,5
+	add v2,1
+;loop until done
+	se v2,4
+	jp display_password_loop
+	ret
+	
+;draws copyright screen
+draw_copyright
+	cls
+	ld v8,orig_nob_thinkfun
+	call draw_text
+	call long_wait
+;this will draw for chip by hap
+	call draw_text
+	ld v0,110
+	call wait_amount
+	ret
+	
+;draws a block over the selected option
+draw_menu_selected
+	ld i,block
+;position of left of block
+	ld v0,16
+draw_menu_selected_loop
+;draw block
+	drw v0,v1,6
+;next segment
+	add v0,8
+;loop until done
+	se v0,48
+	jp draw_menu_selected_loop
+
+;process the menu screen
+menu_screen
+	call long_wait
+	ld v8,play_text
+	call draw_text
+;write unlock text
+	call unlock_text
+;track which option is selected
+	ld v1,17
+	call draw_menu_selected_loop
+menu_input_loop
+;get key
+	ld v3,k
+;check menu up key
+	sne v3,move_up_key
+	jp menu_up
+;check menu down key
+	sne v3,move_down_key
+	jp menu_down
+;check menu select key
+	sne v3,select_key
+	jp menu_select
+	jp menu_input_loop
+	
+menu_up
+;check if we are at the top option
+	sne v1,17
+	jp menu_input_loop
+;hide selected
+	call draw_menu_selected
+;load top option
+	ld v1,17
+;redraw selected
+	call draw_menu_selected
+	jp menu_input_loop
+	
+menu_down
+;check if we are at the bottom option
+	sne v1,23
+	jp menu_input_loop
+;hide selected
+	call draw_menu_selected
+;load bottom option
+	ld v1,23
+;redraw selected
+	call draw_menu_selected
+	jp menu_input_loop
+	
+underscore equ #d03
+	
+menu_select
+;beep and wait 1 frame
+	ld v0,1
+	ld st,v0
+flash_selected_loop
+	ld v2,5
+	ld dt,v2
+;flash selected
+	call draw_menu_selected
+;next flash
+;should be 10 at the beginning
+	add v3,-1
+	call wait_remaining
+;loop until done
+	se v3,0
+	jp flash_selected_loop
+;check if we are at the top option
+	sne v1,17
+	jp select_set_screen
+	cls
+;position of text
+	ld v4,2
+	ld v5,14
+	ld v8,password_text
+	call draw_text_at_position
+	ld i,password_screen_vars
+	ld v8,[i]
+;draw underscore (random byte from memory with 1111....)
+	ld i,underscore
+	drw v1,v3,1
+password_loop
+;get key
+	ld v0,k
+;store key in memory
+	ld i,temp
+	add i,v7
+;next key
+	add v7,1
+	ld [i],v0
+;hide underscore
+	ld i,underscore
+	drw v1,v3,1
+;draw password characters
+	ld f,v0
+	drw v1,v2,5
+;beep
+	ld st,6
+;loop until all characters are typed
+	sne v7,4
+	jp check_password
+;next character
+	add v1,5
+;redraw underscore
+	ld i,underscore
+	drw v1,v3,1
+;wait for key release
+wait_for_key_release_loop
+	sknp v0
+	jp wait_for_key_release_loop
+	jp password_loop
+	
+check_password
+	call draw_sliding_block
+	ld v3,[i]
+;xor middle letters
+	xor v1,v4
+	xor v2,v5
+;check if they match the opposite outer letters
+	se v2,v0
+	jp invalid_password
+	se v1,v3
+	jp invalid_password
+;backup outer characters in inner
+	ld v1,v0
+	ld v2,v3
+;get upper 2 bytes
+	shr v0
+	shr v0
+	shr v3
+	shr v3
+;get lower 2 bytes
+	and v1,v6
+	and v2,v6
+	sne v1,0
+;check that no 0 is to the left of anything not 0 so ...xxx000...
+;check if start is 00 or xx
+	jp bytes_12_valid
+	sne v0,0
+	jp invalid_password
+bytes_12_valid
+;check if middle is 00 or xx
+	sne v2,0
+	jp bytes_23_valid
+	sne v1,0
+	jp invalid_password
+bytes_23_valid
+;check if end is 00 or xx
+	sne v3,0
+	jp password_valid
+	sne v2,0
+	jp invalid_password
+password_valid
+;store password in progress
+	ld i,progress
+	ld [i],v3
+	call accept
+	jp select_set_screen
+	
+invalid_password
+;beep for 10 frames
+	ld st,v4
+;draws no
+	call draw_text
+	call long_wait
+	jp start
+	
+;initial variables of password screen
+password_screen_vars
+	byte 36
+	byte 43 ;character x
+	byte 13 ;character y
+	byte 17 ;underscore y
+	byte %1.1. ;xor 2nd character/wrong beep length
+	byte %.1.1 ;xor 3rd character
+	byte %..11 ;xor outer characters/beep length
+	byte 0 ;current character
+	byte 152 ;unused
+	

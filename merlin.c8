@@ -1,0 +1,289 @@
+;length of level 1
+initial_seq_length equ 4
+;keys
+top_left equ 4
+top_right equ 5
+bottom_left equ 7
+bottom_right equ 8
+;length of the current sequence
+seq_length var v4
+;our position in the index
+seq_index var v5
+;jump past the copyright
+	jp start
+	byte "MERLIN By David WINTER"
+start
+	call draw_squares
+;load merlin logo and position
+	ld i,merlin_logo
+	ld v0,16
+	ld v1,0
+	call draw_logo
+;load level logo and position
+	ld i,level_logo
+	ld v0,11
+	ld v1,27
+	call draw_logo
+	ld seq_length,initial_seq_length
+game_loop
+	call draw_level
+	ld v5,0
+	ld v2,40
+	call wait
+display_loop
+;generate random square
+	rnd v2,3
+	ld v0,v2
+;add the square to the sequence
+	ld i,sequence
+	add i,seq_index
+	ld [i],v0
+;position of top left square
+	ld v0,23
+	ld v1,8
+;move to right column if square is odd
+	ld v3,1
+	and v3,v2
+	se v3,0
+	add v0,10
+;move to bottom row if square is >2
+	ld v3,2
+	and v3,v2
+	se v3,0
+	add v1,10
+;flash the square
+	ld i,fill
+	drw v0,v1,6
+	ld v2,20
+	call wait
+	drw v0,v1,6
+;wait a bit before the nex one
+	ld v2,5
+	call wait
+;next part of sequence
+	add v5,1
+;loop until complete
+	se v4,v5
+	jp display_loop
+	ld v5,0
+;load position of square 1
+input_loop
+	ld v0,23
+	ld v1,8
+	ld i,fill
+;get key
+	ld v3,k
+;each one sets v3 to number of square and v0 and v1 to position
+;check top left
+	se v3,top_left
+	jp not_top_left
+	ld v3,0
+	jp key_pressed
+;check top right
+	se v3,top_right
+	jp not_top_right
+	add v0,10
+	ld v3,1
+	jp key_pressed
+;check bottom left
+	se v3,bottom_left
+	jp not_bottom_left
+	add v1,10
+	ld v3,2
+	jp key_pressed
+;check bottom right
+	se v3,bottom_right
+	jp input_loop
+	add v0,10
+	add v1,10
+	ld v3,3
+	
+key_pressed
+;flash the appropriate square
+	drw v0,v1,6
+	ld v2,20
+	call wait
+	drw v0,v1,6
+;check if input matches sequence
+	ld i,sequence
+	add i,seq_index
+;inc index to check the next one next time
+	add seq_index,1
+	se v0,v3
+	jp wrong_input
+;check if we are done
+	se seq_length,seq_index
+;if not ask for input
+	jp input_loop
+;next level by incrementing seq length
+	call draw_level
+	add seq_length,1
+	jp game_loop
+	
+wrong_input
+;hide all squares
+	jp draw_squares
+;draw game over text
+	ld i,game_over
+	ld v0,16
+	ld v1,14
+;then get stuck in an infinite loop
+infinite_loop
+	jp infinite_loop
+
+;wait for v2 frames
+wait ;2c1
+	ld dt,v2
+wait_loop
+	ld v2,dt
+	se v2,0
+	jp wait_loop
+	ret
+
+;draw the logo at i and position v0,v1
+draw_logo
+	ld v3,v0
+;inc adress by 5 because it is 5 tall
+	ld v2,5
+draw_logo_loop
+	drw v0,v1,5
+;next segment
+	add i,v2
+	add v0,8
+;check if we reached the end
+	ld v5,v3
+	add v5,32
+	se v0,v5
+;loop until complete
+	jp draw_logo_loop
+	ret
+
+;draw level which is sequence length minus 3
+draw_level
+	ld i,sequence
+	ld v3,seq_length
+;subtract to get level
+	add v3,1-initial_seq_length
+	bcd v3
+;get digits
+	ld v2,[i]
+;draw tens digit
+	ld f,v1
+	ld v0,43
+	ld v3,27
+	drw v0,v3,5
+;draw units digit
+	add v0,5
+	ld f,v2
+	drw v0,v3,5
+	ret
+
+;draw the 4 squares
+draw_squares 
+	ld i,square
+;initial square position
+	ld v0,23
+	ld v1,7
+;draw the 4 squares
+	drw v0,v1,8
+	add v0,10
+	drw v0,v1,8
+	add v1,10
+	drw v0,v1,8
+	add v0,-10
+	drw v0,v1,8
+	ret
+
+;graphics
+square
+	byte %11111111
+	byte %1......1
+	byte %1......1
+	byte %1......1
+	byte %1......1
+	byte %1......1
+	byte %1......1
+	byte %11111111
+;fills the square
+fill
+	byte %.111111.
+	byte %.111111.
+	byte %.111111.
+	byte %.111111.
+	byte %.111111.
+	byte %.111111.	
+merlin_logo
+	byte %11.11.11
+	byte %1.1.1.1.
+	byte %1...1.11
+	byte %11..1.11
+	byte %11..1.11
+	
+	byte %111.1111
+	byte %....1...
+	byte %1...1111
+	byte %....11.1
+	byte %111.11..
+	
+	byte %1.1.....
+	byte %1.1.....
+	byte %1.11....
+	byte %..11....
+	byte %1.11111.
+	
+	byte %.1.11111
+	byte %.1.1...1
+	byte %.1.1...1
+	byte %11.11..1
+	byte %11.11..1
+level_logo
+	byte %1.....11
+	byte %1.....1.
+	byte %1.....11
+	byte %1.....1.
+	byte %11111.11
+	
+	byte %111.1...
+	byte %....1...
+	byte %1...1...
+	byte %.....1.1
+	byte %111...1.
+	
+	byte %1.11111.
+	byte %1.1.....
+	byte %1.111...
+	byte %..1.....
+	byte %..11111.
+	
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %11111...
+game_over
+	byte %1111.111
+	byte %1....1.1
+	byte %1.11.111
+	byte %1..1.1.1
+	byte %1111.1.1
+	
+	byte %.111.11.
+	byte %.1.1.1..
+	byte %.1.1.11.
+	byte %.1.1.1..
+	byte %.1.1.11.
+	
+	byte %..111.1.
+	byte %..1.1.1.
+	byte %..1.1.1.
+	byte %..1.1.1.
+	byte %..111..1
+	
+	byte %1.11.11.
+	byte %1.1..1.1
+	byte %1.11.11.
+	byte %1.1..1.1
+	byte %..11.1.1
+;stores the sequence
+;also the place in memory for bcd output
+sequence ;359

@@ -1,0 +1,1961 @@
+;controls
+move_right_key equ 12
+move_left_key equ 3
+jump_key equ 10
+;jump states
+jumping equ 0
+not_jumping equ 1
+jump_key_held equ 2
+;tile types
+raid_box equ -1
+spikes_tile equ -2
+spray_man equ -3
+bouncing_rock equ -4
+boots equ -5
+sad_ball equ -6
+super_spray_man equ -7
+;frames
+ant_right_1 equ 0
+ant_right_2 equ 32
+ant_left_1 equ 64
+ant_left_2 equ 96
+;events
+frontflip_event equ 0
+backflip_event equ 2
+spray_man_left_eventspray_man_left_event equ 4
+spray_man_right_event equ 6
+shoot_spray_event equ 8
+wait_event equ 10
+;flag that says we should scroll the screen
+scroll_flag equ #cc
+;variables
+;position of spray/spray man
+spray_x var v3
+spray_y var v4
+;the current cycle/additional variable of spray man
+spray_frame var v5
+;position of rock
+rock_x var v0
+rock_y var v1
+;y velocity of rock
+rock_vy var v2
+;current frame of rock to draw
+rock_frame var v3
+;position of boots
+boot1_y var v3
+boot2_y var v4
+;velocity of boot 1 (negative of boot 2)
+boot_vy var v5
+;position of ball
+ball_x var v3
+ball_y var v4
+;current frame of the ball
+ball_frame var v5
+;the current object on the screen (0-no object, based on tile types)
+obj_type var v5
+;position and velocity of ant
+ant_x var v6
+ant_vx var v7
+ant_y var v8
+ant_vy var v9
+;whether the ant can jump or not 0-cant 1-can 2-has jumped
+jump_state var va
+;how many of the same tile do we have to draw
+tiles_left var vb
+;the current graphic to display (as offset in graphics table)
+ant_frame var vc
+;the current floor segment to draw
+floor_graphic var vd
+;the index at which the data for the floor starts
+floor_start var ve
+;current position in animation sequence we are on
+sequence_position var vb
+;current event happening
+current_event var vd
+;position in event sequence
+event_position var ve
+
+;jump past the copyright
+	jp start
+
+copyright
+	byte "[ Ant v1.0 ]"
+	
+start
+;set high resolution
+	high
+	ld v0,-2
+	ld v1,0
+	ld i,level_location
+	ld [i],v1
+	call draw_initial_screen
+	call init_ant
+;no objects
+	ld obj_type,0
+;can jump
+	ld jump_state,not_jumping
+;start getting new tiles immediately
+	ld tiles_left,0
+;start at the first level
+	ld floor_graphic,0
+;start at the beginning
+	ld floor_start,0
+main_loop
+	call move_ant
+	se vf,0
+	jp handle_collision
+return_from_special
+;check if we have a spray man
+	sne obj_type,spray_man
+	jp handle_spray_man
+return_from_spray
+	sne ant_vx,scroll_flag
+	call handle_scroll
+	sne v1,boots
+	jp handle_boots
+	sne v1,bouncing_rock
+	jp handle_bouncing_rock
+	sne v1,sad_ball
+	jp handle_sad_ball
+	sne v1,super_spray_man
+	jp handle_super_spray_man
+	ld v0,2
+;wait 2 frames if not scrolling
+	se ant_vx,scroll_flag
+	call wait
+	jp main_loop
+	
+;draws the floor and arrow
+draw_initial_screen
+;count segments drawn
+	ld floor_start,0
+draw_path_loop
+	ld i,floor_y
+	add i,floor_start
+;store y position in floor y
+	ld v0,46
+	ld [i],v0
+;offset by 9
+	add v0,9
+	ld v1,124
+;draw floor segment
+	ld i,floor_segment
+	drw v1,v0,4
+;beep for 1 frame and wait for 2
+	ld v0,1
+	call beep_and_wait
+	ld v0,2
+	call wait
+;scroll left until bottom filled
+	se floor_start,31
+	scl
+;next segment
+	add floor_start,1
+;loop until done
+	se floor_start,32
+	jp draw_path_loop
+;position of arrow
+	ld v0,4
+	ld v1,4
+;draw arrow
+	ld i,arrow
+	drw v0,v1,0
+	ret
+	
+handle_scroll
+;check if we need new tiles
+	sne tiles_left,0
+	call new_tiles
+	add tiles_left,-1
+;get current tile
+	ld i,current_tile
+	ld v1,[i]
+;store current tile
+	ld i,floor_y
+	add i,floor_start
+	ld [i],v0
+;move floor start
+	add floor_start,1
+	ld v2,#1f
+;wrap around
+	and floor_start,v2
+;check spikes tile
+	sne v1,spikes_tile
+	jp draw_spikes
+	sne v1,raid_box
+	jp draw_raid_box
+;position of new segment
+	add v0,9
+	ld v2,124
+;get floor segment according to level
+	ld i,floor_segment
+	add i,floor_graphic
+	drw v2,v0,4
+	ret
+	
+draw_spikes
+;position of spikes
+;spikes are drawn higher to handle collision
+	add v0,7
+	ld v1,124
+	ld i,spikes
+	drw v1,v0,4
+	ret
+	
+draw_raid_box
+;figure out graphic index according to current tile
+	ld v1,0
+	sne vb,2
+	ld v1,8
+	sne vb,1
+	ld v1,16
+	sne vb,0
+	ld v1,24
+	ld i,raid_box_graphic
+	add i,v1
+	ld v1,124
+;offset y by 1
+	add v0,1
+;draw the raid box tile
+	drw v1,v0,8
+;draw floor segment below
+	add v0,8
+	add i,floor_segment
+	add i,floor_graphic
+	drw v1,v0,4
+	ret
+
+handle_spray_man
+	sne ant_vx,scroll_flag
+;move spray if we are scrolling
+	add spray_x,-4
+	ld i,spray
+;hide spray
+	drw spray_x,spray_y,0
+;move spray_man
+	se spray_x,0
+	add spray_x,-4
+;don't respawn if reached left side
+	se spray_x,0
+;otherwise redraw
+	drw spray_x,spray_y,0
+	sne spray_x,0
+	ld obj_type,0
+	jp return_from_spray
+	
+	
+;read new tiles from memory
+new_tiles
+	ld i,a10
+	ld v1,[i]
+;add 2 to get to the next tile
+	add v0,2
+;move to the next page if needed
+	sne v0,254
+	call next_page
+	ld [i],v0
+;load the appropriate tile
+	ld i,812
+	sne v1,1
+	ld i,level_data2
+	add i,v0
+	ld v1,[i]
+	ld i,current_tile
+;check if less than 240
+	ld [i],v1
+	ld v2,240
+	subn v2,v1
+	sne vf,0
+	jp less_240
+;check if spikes tile
+	sne v1,spikes_tile
+	jp set_spikes
+	sne v1,raid_box
+	jp set_raid_box
+;check if spray man
+	sne v1,spray_man
+	jp set_spray_man
+	jp any_other_object
+	
+less_240
+;in this case the length is the second byte
+	ld vb,v1
+	ret
+	
+
+next_page
+;set the beginning of the next page
+	ld v1,1
+	ld v0,0
+	ld i,a10
+	ld [i],v1
+	ret
+	
+;spikes are always 12 long
+set_spikes
+	ld vb,12
+	ret
+;raid box is always 4 long
+set_raid_box
+	ld vb,4
+	ret
+set_spray_man
+	ld vb,1
+	ld obj_type,spray_man
+	ld spray_y,v0
+;offset y
+	add spray_y,-7
+	ld v0,112
+;draw spray man
+	ld i,spray_man_graphic
+	drw v0,spray_y,0
+;beep for 4 frames
+	ld v0,4
+	call beep_and_wait
+;set spray x
+	ld spray_x,96
+;draw spray
+	ld i,spray
+	drw spray_x,spray_y,0
+;play spray sound
+	ld v0,2
+	call beep_and_wait
+	ld v0,2
+	call wait
+	ld v0,1
+	call beep_and_wait
+;hide spray man
+	ld v0,112
+	ld i,spray_man_graphic
+	drw v0,spray_y,0
+	ret
+;any other object is 1 long
+any_other_object
+	ld tiles_left,1
+	ret
+
+;positions the ant and draws it
+init_ant
+;position of ant
+	ld ant_x,0
+	ld ant_y,46
+;first frame
+	ld ant_frame,0
+;draw ant
+	ld i,ant
+	drw ant_x,ant_y,0
+	ret
+
+;gets input and moves ant accordingly
+move_ant
+;by default no horiz movement
+	ld ant_vx,0
+	call check_ant_floor_collision
+	call jump_and_fall
+;store previous ant frame
+	ld v2,ant_frame
+;check move right key
+	ld v0,move_right_key
+	sknp v0
+	call move_right
+;check move left key
+	ld v0,move_left_key
+	sknp v0
+	call move_left
+;move ant x (if not scrolling)
+	ld v0,ant_x
+	se ant_vx,scroll_flag
+	add ant_x,ant_vx
+;move ant y_threshold
+	ld v1,ant_y
+	add ant_y,ant_vy
+;hide ant
+	ld i,ant
+	add i,v2
+	drw v0,v1,0
+;scroll left if needed
+	sne ant_vx,scroll_flag
+	scl
+;redraw ant
+	ld i,ant
+	add i,ant_frame
+	drw ant_x,ant_y,0
+	ret
+
+;gets input and moves ant without scrolling the screen
+move_ant_static
+;by default no horiz movement
+	ld ant_vx,0
+	call check_ant_floor_collision
+	call jump_and_fall
+;store previous ant frame
+	ld v2,ant_frame
+;check move right key
+	ld v0,move_right_key
+	sknp v0
+	call move_right
+;move right anyway if scroll
+	sne ant_vx,scroll_flag
+	ld ant_vx,4
+;check move left key
+	ld v0,move_left_key
+	sknp v0
+	call move_left
+;check move left key
+	ld v0,move_left_key
+	sknp v0
+	call move_left
+;move ant x
+	ld v0,ant_x
+	add ant_x,ant_vx
+;move ant y_threshold
+	ld v1,ant_y
+	add ant_y,ant_vy
+;hide ant
+	ld i,ant
+	add i,v2
+	drw v0,v1,0
+;redraw ant
+	ld i,ant
+	add i,ant_frame
+	drw ant_x,ant_y,0
+	ret
+
+handle_collision
+;count blinks
+	ld v1,0
+blink_loop
+;hide ant
+	drw ant_x,ant_y,0
+;beep for 2 frames and wait for 2
+	ld v0,2
+	call beep_and_wait
+	ld v0,2
+	call wait
+;next blink
+	add v1,1
+;loop until done
+	se v1,7
+	jp blink_loop
+;wait 30 frames
+	ld v0,30
+	call wait
+	exit
+	
+;jump if jump key is pressed, then check if we fall
+jump_and_fall
+;check if jump key pressed
+	ld v0,jump_key
+	skp v0
+	jp not_pressed
+;check if we can jump
+	sne jump_state,jumping
+	ret
+	sne jump_state,not_jumping
+	call store_y_threshold
+	ld jump_state,jump_key_held
+;make ant go up
+	ld ant_vy,-4
+;check if erached theshold
+	ld i,y_threshold
+	ld v0,[i]
+	se ant_vy,v0
+	ret
+;reduce speed and stop jumping
+	ld jump_state,jumping
+	ld ant_vy,-2
+	ret
+	
+;set the y threshold at which the holding stops
+store_y_threshold
+;beep and wait for 2 frames
+	ld v0,2
+	call beep_and_wait
+	ld v0,ant_y
+	add v0,-20
+;store position 20 above in y threshold
+	ld i,y_threshold
+	ld [i],v0
+	ret
+	
+not_pressed
+;check if jump key still held
+	sne jump_state,jump_key_held
+	jp jumping
+;check if left side of ant hit floor
+	ld v0,ant_x
+	call get_floor_y
+	sne ant_y,v0
+	jp ant_hit_floor
+;check right side of ant
+	ld v0,ant_x
+	add v0,12
+	call get_floor_y
+	sne ant_y,0
+	jp ant_hit_floor
+	ret
+ant_hit_floor
+;if hit, no longer jumping
+	ld jump_state,not_jumping
+	ret
+jumping
+;stop jumping if key released
+	ld jump_state,jumping
+	ld ant_vy,-2
+	ret
+
+;check if the ant collides with the floor
+check_ant_floor_collision
+;ignore if we are jumping
+	sne jump_state,jump_key_held
+	ret
+;fall down by default
+	ld v0,4
+;start slowly if moving slowly up
+	sne ant_vy,-2
+	ld v0,2
+	ld ant_vy,v0
+;check tile below left side of ant
+	ld v0,ant_x
+	call get_floor_y
+;check if we collide with the floor
+	sne ant_y,v0
+;if so, disable y speed
+	ld ant_vy,0
+;get height of tile below right side of ant
+	ld v0,ant_x
+	add v0,12
+	call get_floor_y
+	sne ant_y,v0
+	ld ant_vy,0
+;if y speed is 4, disable jump
+	sne ant_vy,4
+	ld ant_vy,0
+	ret
+	
+;get the height of the floor we are on
+get_floor_y
+;get tile number by dividing by 4
+	shr v0
+	shr v0
+;add offset
+	add v0,floor_start
+	ld v1,#1f
+	and v0,v1
+;get current tile we are on
+	ld i,floor_y
+	add i,v0
+	ld v0,[i]
+;duplicate number
+	ld v1,v0
+	ret
+
+;moves the ant right
+move_right
+;switch to the other frame (or first move right frame)
+	ld v0,ant_right_1
+	sne ant_frame,0
+	ld v0,ant_left_2
+	ld ant_frame,v0
+;get height of tile directly in front of the ant
+	ld v0,ant_x
+	add v0,16
+	call get_floor_y
+;get height difference
+	sub v0,ant_y
+;check if tile in front is higher than we are currently on
+	sne vf,0
+	ret
+;make the ant move right
+	ld ant_vx,4
+;scroll if reached x=56
+	sne ant_x,56
+	ld ant_vx,scroll_flag
+;check if height is aligned with ant
+	sne v1,ant_y
+	jp same_height_right
+	ret
+
+;make the ant go left	
+move_left
+;switch to the other frame (or first move left frame)
+	ld v0,ant_left_1
+	sne ant_frame,64
+	ld v0,ant_left_2
+	ld ant_frame,v0
+;check if we are on the left
+	sne ant_x,0
+	ret
+;check height of tile directly to the left
+	ld v0,ant_x
+	add v0,-4
+	call get_floor_y
+;get height difference
+	sub v0,ant_y
+;check if tile behind is higher than we are currently on
+	sne vf,0
+	ret
+;make the ant move left
+	ld ant_vx,-4
+;check if height is aligned with ant
+	sne v1,ant_y
+	jp same_height_left
+	ret
+same_height_left
+	ld v0,ant_x
+;check if tile is below left side
+	call get_floor_y
+	subn v0,ant_y
+	sne vf,0
+;if so, make the ant go up
+	ld ant_vy,-4
+	ret
+	
+same_height_right
+	ld v0,ant_x
+;check if tile is below right side
+	add v0,12
+	call get_floor_y
+	subn v0,ant_y
+	sne vf,0
+;if so, make the ant go up
+	ld ant_vy,-4
+	
+;beeps and waits v0 frames
+beep_and_wait
+	ld st,v0
+	shl v0
+;why is this here???
+	jp wait
+;waits v0 frames
+wait
+	ld dt,v0
+wait_loop
+;check if done waiting
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+	ret
+
+;handles the stage with the boots
+handle_boots
+	call move_ant_to_left_side
+	call spawn_boots
+handle_boots_loop
+	call move_ant_static
+;check collision
+	se vf,0
+	jp handle_collision
+	call update_boots
+;check if reached right
+	sne ant_x,112
+	jp ant_reached_right
+	jp handle_boots_loop
+
+;moves the ant to the left side of the screen	
+move_ant_to_left_side
+;beep for 1 frame
+	ld v0,1
+	call beep_and_wait
+;hide ant
+	ld i,ant
+	add i,ant_frame
+	drw ant_x,ant_y,0
+;move ant left
+	add ant_x,4
+;redraw ant
+	drw ant_x,ant_y,0
+;loop until ant reached left
+	se ant_x,0
+	jp move_ant_to_left_side
+	ret
+
+;spawns the boots
+spawn_boots
+;height of top boots
+	ld boot1_y,9
+;height of bottom boots
+	ld boot2_y,37
+	ld boot_vy,4
+	ld v0,24
+;first top boot
+	ld i,boot_graphic
+	drw v0,boot1_y,0
+;second bottom boot
+	add v0,20
+	drw v0,boot2_y,0
+;third top boot
+	add v0,20
+	drw v0,boot1_y,0
+;fourth bottom boot
+	add v0,20
+	drw v0,boot2_y,0
+	ret
+
+;moves the boots
+update_boots
+;make boot go down if at the top
+	sne boot1_y,9
+	ld boot_vy,4
+;make boot go up if at the bottom
+	sne voot1_y,37
+	ld boot_vy,-4
+	ld i,boot_graphic
+;remember old position
+	ld v0,24
+	ld boot1_vy,boot1_y
+;move boot
+	add boot1_y,v5
+;move first boot
+	drw v0,v1,0
+	drw v0,boot1_y,0
+;move third boot
+	ld v0,64
+	drw v0,v1,0
+	drw v0,boot1_y,0
+;remember old position
+	ld v0,44
+	ld v1,boot2_y
+;move other boot
+	sub boot2_y,boot_vy
+;move second boot
+	drw v0,v1,0
+	drw v0,boot2_y,0
+;move fourth boot
+	ld v0,84
+	drw v0,v1,0
+	drw v0,boot2_y,0
+	ret
+
+;handle the ant reaching the right side in a static level
+ant_reached_right
+;move on to the next level
+	add floor_graphic,4
+move_ant_left_loop
+	scl
+;get start of floor
+	ld i,floor_y
+	add i,floor_start
+;position of new tile
+	ld v0,42
+	ld [i],v0
+	add v0,9
+	ld v1,124
+;draw new floor segment
+	ld i,floor_segment
+	add i,floor_graphic
+	drw v1,v0,4
+;play beep and wait 2 frames
+	ld v0,1
+	call beep_and_wait
+	ld v0,2
+	call wait
+;move floor start
+	add floor_start,1
+;wrap around
+	se floor_start,32
+	ld floor_start,0
+;move ant left
+	add ant_x,-4
+	se ant_x,0
+	jp move_ant_left_loop
+	jp return_from_special
+	
+;handles the stage with the bouncing rock
+handle_bouncing_rock
+	call move_ant_to_left_side
+	call spawn_bouncing_rock
+handle_bouncing_rock_loop
+	call move_ant_static
+;check collision
+	se vf,0
+	jp handle_collision
+;check if reached right
+	sne ant_x,112
+	jp ant_reached_right
+	jp handle_bouncing_rock_loop
+	
+;spawns the bouncing rocks
+spawn_bouncing_rock
+;position of bouncing rock
+	ld rock_x,112
+	ld rock_y,15
+;y speed
+	ld rock_vy,-2
+;first frame
+	ld rock_frame,0
+	ld i,obj_params
+	ld [i],v3
+;draw bouncing rock graphic
+	ld i,bouncing_rock_graphic
+remove_bouncing_rock
+	drw rock_x,rock_y,0
+	ret
+
+;moves the bouncing rock
+update_bouncing_rock
+	ld i,obj_params
+	ld v3,[i]
+;flip vy if low
+	ld v4,2
+	sne rock_vy,2
+	ld v4,-2
+	sne rock_vy,0
+	ld v4,2
+	sne v1,17
+	call rock_reached_top
+	sne v1,31
+	call rock_reached_bottom
+;store new vy
+	ld rock_vy,v4
+;remember previous frame
+	ld v4,rock_frame
+;next frame
+	add rock_frame,32
+;loop back
+	sne rock_frame,128
+	ld rock_frame,0
+;load old graphic
+	ld i,bouncing_rock_graphic
+	add i,v4
+;get new position
+	add rock_y,rock_vy
+	ld v5,rock_x
+	add rock_x,-4
+;erase old rock
+	drw v5,v4,0
+;draw new rock if not reached left
+	ld i,bouncing_rock_graphic
+	add i,rock_frame
+	se v5,0
+	drw rock_x,rock_y,0
+;write new prams
+	ld [i],obj_params
+	ld [i],v3
+;check if reached left
+	se v5,0
+	ret
+	jp spawn_bouncing_rock
+	
+;make the rock go down when it reached the top
+rock_reached_top
+;start going down
+	ld v4,4
+;start slowly if going up
+	sne rock_vy,-4
+	ld v4,-2
+	ret
+;make the rock go up when it reached the bottom
+rock_reached_bottom
+;start going up
+	ld v4,-4
+;start slowly if going down
+	sne rock_vy,4
+	ld v4,2
+;bang if reached bottom
+	sne v4,2
+	ld st,v4
+	ret
+
+;handle the stage with the sad ball
+handle_sad_ball
+	call spawn_sad_ball
+handle_sad_ball_loop
+	call update_sad_ball
+	call move_ant_static
+;check collision
+	se vf,0
+	jp handle_collision
+;check if reached right
+	se ant_x,112
+	jp handle_sad_ball_loop
+	jp ant_reached_right
+	
+spawn_sad_ball
+;position of sad ball
+	ld ball_x,112
+	ld ball_y,15
+	ld v5,0
+	ld i,sad_ball_graphic
+	drw ball_x,ball_y,0
+	ret
+	
+;moves the sad ball
+update_sad_ball
+	ld v0,ball_x
+;check floor below right side of sad ball
+	add v0,12
+	call get_floor_y
+	add v1,-7
+;check if ball needs to fall down
+	se ball_y,v1
+	call move_sad_ball_down
+;move ball left
+	add ball_x,-4
+;hide sad ball
+	ld i,sad_ball_graphic
+	add i,ball_frame
+	drw v0,v1,0
+;redraw sad ball if not reached right side
+	ld i,sad_ball_graphic
+	add i,ball_frame
+	se v0,0
+	drw ball_x,ball_y,0
+	se v0,0
+	ret
+	jp spawn_sad_ball
+	
+move_sad_ball_down
+	ld v1,ball_y
+	add ball_y,4
+;beep for 2 frames
+	ld v0,2
+	ld st,v0
+	ret
+
+handle_super_spray_man
+	call move_ant_to_left_side
+	call 65c
+	ld event_position,0
+	call load_event
+super_spray_man_loop
+	call move_ant_flat
+;check collision
+	se vf,0
+	jp handle_collision
+;if ant reaches right we win
+	sne ant_x,112
+	jp win_game
+	call process_event
+;wait 3 frames
+	sne v0,3
+	call wait
+	jp super_spray_man_loop
+	
+;processes the current event
+process_event
+	sne current_event,frontflip_event_event
+	jp frontflip_super_spray_man
+	sne current_event,backflip_event
+	jp backflip_super_spray_man
+	sne current_event,spray_man_left_event
+	jp spray_man_walk_left
+	sne current_event,spray_man_right_event
+	jp spray_man_walk_right
+	sne current_event,shoot_spray_event
+	jp move_spray
+;otherwise wait
+	jp wait_cycle
+	
+;spawns special spray man
+spawn_super_spray_man
+;position of spray man
+	ld spray_x,104
+	ld spray_y,39
+;frame of spray man
+	ld spray_frame,0
+;draw spray man
+	ld i,spray_man_graphic
+	drw spray_x,spray_y,0
+	ret
+	
+;loads the next event
+load_event
+	ld sequence_position,0
+;set first frame by default
+	ld spray_man_graphic,0
+;load next
+	ld i,event_sequence
+	add i,event_position
+	ld v0,[i]
+	ld current_event,v0
+;move floor start
+	add event_position,1
+;wrap around
+	sne event_position,20
+	ld event_position,0
+;spawn spray if it is 8
+	sne current_event,8
+	jp spawn_spray
+	ret
+	
+;make spray man walk right
+spray_man_walk_right
+;put the spray man on the floor
+	ld spray_y,39
+	ld v2,spray_frame
+;next frame
+	add spray_frame,32
+;wrap around after 2 frames
+	sne spray_frame,64
+	ld spray_frame,0
+;move to the right and remember old position
+	ld v0,spray_x
+	add spray_x,4
+;hide spray man if on original position, otherwise draw walking animation
+	ld i,spray_man_right_graphic
+	add i,v2
+	sne v0,72
+	ld i,spray_man_graphic
+	drw v0,spray_y,0
+;draw walking if haven't reached right otherwise draw spray man
+	ld i,spray_man_right_graphic
+	add i,v5
+	sne ant_x,104
+	ld i,spray_man
+	ld spray_x,spray_Y,0
+;load another event if we reached right
+	se ant_x,104
+	ret
+	jp load_event
+
+;make spray man walk left
+spray_man_walk_left
+;put the spray man on the floor
+	ld spray_y,39
+	ld v2,spray_frame
+;next frame
+	add spray_frame,32
+;wrap around after 2 frames
+	sne spray_frame,64
+	ld spray_frame,0
+;move to the left and remember old position
+	ld v0,spray_x
+	add spray_x,-4
+;hide spray man if on original position, otherwise draw walking animation
+	ld i,spray_man_left_graphic
+	add i,v2
+	sne v0,104
+	ld i,spray_man_graphic
+	drw v0,spray_y,0
+;draw walking if haven't reached left otherwise draw spray man
+	ld i,spray_man_left_graphic
+	add i,v5
+	sne ant_x,72
+	ld i,spray_man
+	ld spray_x,spray_Y,0
+;load another event if we reached left
+	se ant_x,72
+	ret
+	jp load_event
+	
+;makes the spray man do a front flipping animation
+frontflip_super_spray_man
+;load animation frame
+	ld i,frontflip_animation
+	add i,sequence_position
+	ld v2,[i]
+;hide spray man
+	ld i,spray_man_graphic
+	add i,spray_frame
+	drw spray_x,spray_y,0
+;draw new spray man
+	ld i,spray_man_graphic
+	add i,v2
+	drw v0,v1,0
+;update position
+	ld spray_x,v0
+	ld spray_y,v1
+	ld spray_frame,v2
+;play beep if 2nd frame
+	ld v0,1
+	sne v5,32
+	call beep_and_wait
+;next position
+	add sequence_position,3
+;check if done
+	se sequence_position,30
+	ret
+;if so, get another event
+	jp load_event
+
+;makes the spray man do a back flipping animation
+backflip_super_spray_man
+;load animation frame
+	ld i,backflip_animation
+	add i,sequence_position
+	ld v2,[i]
+;hide spray man
+	ld i,spray_man_graphic
+	add i,spray_frame
+	drw spray_x,spray_y,0
+;draw new spray man
+	ld i,spray_man_graphic
+	add i,v2
+	drw v0,v1,0
+;update position
+	ld spray_x,v0
+	ld spray_y,v1
+	ld spray_frame,v2
+;play beep if 2nd frame
+	ld v0,1
+	sne v5,32
+	call beep_and_wait
+;next position
+	add sequence_position,3
+;check if done
+	se sequence_position,30
+	ret
+;if so, get another event
+	jp load_event
+
+;71c
+;spawns the spray to the left
+spawn_spray
+;launch spray at 16 to the left of the man
+	ld spray_frame,spray_x
+	add spray_frame,-16
+	ld i,spray/spray
+	drw spray_frame,spray_y,0
+;play 2 beeps
+	ld v0,1
+	call beep_and_wait
+	ld v0,1
+	call beep_and_wait
+	ret
+	
+move_spray
+;remember old position
+	ld v0,spray_frame
+;move it left
+	add spray_frame,-4
+;hide spray
+	ld i,spray
+	drw v0,spray_y,0
+;draw it again if it didn't reach the left
+	se v0,0
+	drw spray_frame,spray_y,0
+;load a new event if it did
+	se v0,0
+	ret load_event
+
+;wait until 6 cycles passed, then load next
+wait_cycle
+	add spray_frame,1
+	se spray_frame,6
+	ret
+	jp load_event
+	
+;moves ant on a flat space
+move_ant_flat
+	ld ant_vx,0
+	call check_ant_flat_collision
+	call flat_jump_and_fall
+;remember ant frame
+	ld v2,ant_frame
+;check right key
+	ld v0,move_right_key
+	sknp v0
+	call move_right_flat
+;remember previous position and add move
+	ld v0,ant_x
+	add ant_x,ant_vx
+	ld v1,ant_y
+	add ant_y,ant_vy
+;hide ant
+	ld i,ant
+	add i,v2
+	drw v0,v1,0
+;draw ant in new spot
+	ld i,ant
+	add i,ant_frame
+	drw ant_x,ant_y,0
+	ret
+	
+;jumps and falls over a flat platform
+flat_jump_and_fall
+;check if jump key held
+	ld v0,jump_key
+	skp v0
+	jp jump_not_pressed
+;check if we can't jump
+	sne jump_state,jumping
+	ret
+;beep for 2 frames if we are beginning to jump
+	ld v0,2
+	sne jump_state,not_jumping
+	call beep_and_wait
+;set that we are currently jumping
+	ld jump_state,jump_key_held
+;start moving up
+	ld ant_vy,-4
+;stop jumping if we reach the peak, otherwise quit
+	se ant_y,26
+	ret
+	ld jump_state,jumping
+	ld ant_vy,2
+	ret
+jump_not_pressed
+;check if we are holding jump
+	sne jump_state,jump_key_held
+	jp currently_jumping
+;check if we hit the bottom
+	sne ant_y,46
+	jp hit_bottom
+	ret
+hit_bottom
+	ld jump_state,not_jumping
+	ret
+currently_jumping
+;stop holding jump
+	ld jump_state,jumping
+;decrese speed
+	ld ant_vy,-2
+	ret
+	
+;check collision with flat floor
+check_ant_flat_collision
+	sne jump_state,jump_key_held
+	ret
+;make ant fall
+	ld v0,4
+	sne ant_vy,-2
+;start slowly
+	ld v0,2
+	ld v9,v0
+;stop falling if we reached the ground
+	sne ant_y,46
+	ld ant_vy,0
+;stop jumping if we are falling down
+	sne ant_vy,4
+	ld jump_state,not_jumping
+	ret
+
+;moves right over a flat platform
+move_right_flat
+;swap frame (and face right)
+	ld v0,ant_right_1
+	sne ant_frame,ant_right_1
+	ld v0,ant_right_2
+	ld ant_frame,v0
+;move right
+	ld ant_vx,4
+	ret
+	
+;moves right over a flat platform
+move_left_flat
+;swap frame (and face left)
+	ld v0,ant_left_1
+	sne ant_frame,ant_left_1
+	ld v0,ant_left_2
+	ld ant_frame,v0
+;move left if you can
+	sne ant_x,0
+	ret
+	ld ant_vx,-4
+	ret
+
+;process game win
+win_game
+;store win in registers
+	ld v0,1
+	ld r,v0
+;play winning melody
+	ld v0,2
+	call beep_and_wait
+	call wait
+	ld v0,4
+	call beep_and_wait
+	call wait
+	ld v0,8
+	call beep_and_wait
+	ld v0,30
+	call wait
+	cls
+	exit
+
+;the height at which the ant collides with the floor
+floor_y
+	pad 32
+
+level_data
+;first number, height second number:
+;valid object: that object
+;any other number n: floor of length n
+;level 1
+	byte 42,4, 38,4, 34,4, 30,4, 26,4, 22,8, 46,-1,22,8
+	byte 26,4, 30,4, 34,4, 38,4, 42,16,42,-3,34,3, 34,-1
+	byte 34,8, 38,16,46,-2,38,4, 42,4, 42,-1,42,6, 42,-1
+	byte 42,6, 38,10,38,6, 46,-2,38,4, 34,4, 30,3, 30,-3
+	byte 26,4, 22,8, 26,-1,52,-2,42,6, 42,28,38,4, 38,-4
+;level 2
+	byte 30,4, 46,-2,26,5, 22,4, 46,-2,38,8, 38,-1,38,-1
+	byte 26,4, 22,8, 22,-3,46,14,22,8, 46,-2,22,4, 46,-2
+	byte 22,3, 46,-2,22,4, 22,-3,46,-2,38,8, 46,6, 42,4
+	byte 38,4, 34,4, 30,4, 26,4, 22,4, 50,-1,50,-1,50,-1
+	byte 50,-1,46,8, 30,4, 34,4, 38,4, 42,4, 50,-2,46,4
+	byte 46,-3,42,4, 22,3, 42,28,38,4, 38,-5,
+;level 3
+	byte 50,-2,42,4, 38,4, 34,4, 30,4, 26,4, 22,4, 26,-1
+	byte 34,-1,42,-1,38,4, 30,4, 50,-2,22,3, 50,-2,30,3
+	byte 50,-2,22,3, 22,-3,50,-2,30,3, 50,-2,22,3, 46,-1
+	byte 46,-1,46,-1,46,8, 42,4, 22,6, 46,4, 42,4, 38,4
+	byte 34,4, 30,4, 26,4, 22,8, 22,-6
+;level 4
+	byte 46,4, 46,-3,34,3, 30,4
+level_data2
+	byte 46,2, 38,2, 22,3, 26,2, 38,5, 38,-1,46,6, 26,3
+	byte 30,3, 34,6, 38,4, 38,-3,22,6, 50,-2,50,-1,46,6
+	byte 26,3, 22,4, 30,2, 34,2, 38,6, 26,4, 30,6, 30,-3
+	byte 50,-2,38,4, 22,3, 34,3, 26,5, 26,-1,22,3, 22,-3
+	byte 46,6, 30,2, 26,2, 22,4, 50,-2,30,4, 30,-3,46,8
+	byte 46,-1,42,6, 22,4, 26,1, 22,1, 26,1, 22,1, 26,1
+	byte 22,1, 26,1, 22,1, 26,1, 22,1, 26,1, 22,1, 26,1
+	byte 22,1, 26,1, 22,1, 26,1, 22,1, 26,1, 22,1, 26,1
+	byte 22,1, 26,1, 22,4, 26,4, 26,-3,22,4, 50,-2,50,-1
+	byte 46,5, 42,2, 38,3, 22,2, 30,3, 26,2, 22,3, 26,2
+	byte 30,-1,46,6, 34,2, 22,8, 22,-3,46,6, 22,3, 46,6
+	byte 22,3, 46,6, 22,3, 46,6, 22,3, 22,-1,22,2, 46,6
+	byte 22,3, 30,-2,26,5, 30,4, 34,3, 38,2, 42,1, 46,5
+	byte 46,-1,42,4, 46,4, 46,-1,34,4, 46,5, 42,-1,46,6
+	byte 46,-1,46,5, 46,-1,46,5, 46,-1,42,4, 50,-2,46,3
+	byte 46,-3,46,-1,26,4, 30,-2,26,4, 46,34,46,-7
+
+;the maximum y the ant can get to by jumping
+y_threshold
+	pad 2
+;the index to read memory from (byte 2 is which 254 byte block, byte 1 is index)
+level_location
+	byte -2,0
+;the tile we are currently placing
+current_tile
+	pad 2
+;0-x 1-y 2-vy 3-graphic
+obj_params
+	pad 4
+	
+;position of frontflip frames 0-x 1-y 2-frame
+frontflip_animation
+	byte 104,39,32
+	byte 100,29,64
+	byte 96,21,96
+	byte 92,15,128
+	byte 88,17,160
+	byte 84,15,192
+	byte 80,21,224
+	byte 76,29,64
+	byte 72,39,32
+	byte 72,39,0
+
+;position of backflip frames 0-x 1-y 2-frame
+backflip_animation
+	byte 72,39,32
+	byte 76,29,64
+	byte 80,21,224
+	byte 84,15,192
+	byte 88,17,160
+	byte 92,15,128
+	byte 96,21,96
+	byte 100,29,64
+	byte 104,39,32
+	byte 104,39,0
+	
+;the sequence of events the spray man performs, according to event constants
+event_sequence
+	0,10,8,6,4,8,2,10,8,0,6,8,10,0,2,8,4,2,10,8
+	
+ant
+	word %...........1...1
+	word %............1.1.
+	word %.1111.......111.
+	word %11.111.111.11.11
+	word %1.11111111111111
+	word %11111111111.111.
+	word %.1111.1.111.....
+	word %1.1..1.1.1.1....
+	word %1.1..1.1.1.1....
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	
+	word %...........1...1
+	word %............1.1.
+	word %.1111.......111.
+	word %11.111.111.11.11
+	word %1.11111111111111
+	word %11111111111.111.
+	word %..111..11111....
+	word %.1.1..1.1.1.1...
+	word %.1.1..1.1.1.1...
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	
+	word %1...1...........
+	word %.1.1............
+	word %.111.......1111.
+	word %11.11.111.111.11
+	word %11111111111111.1
+	word %.111.11111111111
+	word %.....111.1.1111.
+	word %....1.1.1.1..1.1
+	word %....1.1.1.1..1.1
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	
+	word %1...1...........
+	word %.1.1............
+	word %.111.......1111.
+	word %11.11.111.111.11
+	word %11111111111111.1
+	word %.111.11111111111
+	word %....11111..111..
+	word %...1.1.1.1..1.1.
+	word %...1.1.1.1..1.1.
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+
+floor_segment
+	byte %1111....
+	byte %........
+	byte %1111....
+	byte %.1.1....
+	
+	byte %111.....
+	byte %1.11....
+	byte %111.....
+	byte %1.11....
+	
+	byte %1111....
+	byte %..1.....
+	byte %1.......
+	byte %1111....
+	
+	byte %1111....
+	byte %1..1....
+	byte %1..1....
+	byte %1111....
+	
+arrow
+;high res graphic
+	word %........1.......
+	word %........11......
+	word %........111.....
+	word %........1111....
+	word %1111111111111...
+	word %11111111111111..
+	word %111111111111111.
+	word %1111111111111111
+	word %111111111111111.
+	word %11111111111111..
+	word %1111111111111...
+	word %........1111....
+	word %........111.....
+	word %........11......
+	word %........1.......
+	word %................
+
+raid_box_graphic
+;made up of 4 4x8 tiles
+	byte %1111....
+	byte %1.......
+	byte %1.11....
+	byte %1.1.....
+	byte %1.11....
+	byte %1.1.....
+	byte %1.......
+	byte %1.......
+	
+	byte %1111....
+	byte %........
+	byte %...1....
+	byte %1.1.....
+	byte %..11....
+	byte %1.1.....
+	byte %........
+	byte %........
+	
+	byte %1111....
+	byte %........
+	byte %..1.....
+	byte %1.1.....
+	byte %1.1.....
+	byte %1.1.....
+	byte %........
+	byte %........
+	
+	byte %1111....
+	byte %...1....
+	byte %11.1....
+	byte %1.11....
+	byte %1.11....
+	byte %11.1....
+	byte %...1....
+	byte %...1....
+
+;b38
+spikes
+	byte %..1.....
+	byte %..11....
+	byte %.111....
+	byte %1111....
+
+boot_graphic
+;high res graphic
+	word %................
+	word %................
+	word %................
+	word %................
+	word %...........11111
+	word %..........1....1
+	word %..........11...1
+	word %........11.....1
+	word %......11..1.11.1
+	word %.11111..1...11.1
+	word %1.....1........1
+	word %1111111111111111
+	word %.111111111111111
+	word %................
+	word %................
+	word %................
+
+bouncing_rock_graphic
+;high res graphic
+	word %...11..111......
+	word %..1..11...1.....
+	word %.1.........1....
+	word %1...........1...
+	word %1......1....1...
+	word %.1......1...1...
+	word %..1......1...1..
+	word %..1......1....1.
+	word %.1.......1....1.
+	word %1.......1.....1.
+	word %1.............1.
+	word %.1..........11..
+	word %..1......111....
+	word %...1....1.......
+	word %....1111........
+	word %................
+	
+	word %................
+	word %.......1111.....
+	word %......1....1....
+	word %...111.....1....
+	word %..1.........1...
+	word %.1..........1...
+	word %1.....111...1...
+	word %1....1...1...1..
+	word %1...1.........1.
+	word %.1............1.
+	word %.1............1.
+	word %1.............1.
+	word %1............1..
+	word %.1....11....1...
+	word %..1..1..1..1....
+	word %...11....11.....
+	
+	word %................
+	word %........1111....
+	word %.......1....1...
+	word %....111......1..
+	word %..11..........1.
+	word %.1.............1
+	word %.1.....1.......1
+	word %.1....1.......1.
+	word %.1....1......1..
+	word %..1...1......1..
+	word %...1...1......1.
+	word %...1....1......1
+	word %...1...........1
+	word %....1.........1.
+	word %.....1...11..1..
+	word %......111..11...
+	
+	word %.....11....11...
+	word %....1..1..1..1..
+	word %...1....11....1.
+	word %..1............1
+	word %.1.............1
+	word %.1............1.
+	word %.1............1.
+	word %.1.........1...1
+	word %..1...1...1....1
+	word %...1...111.....1
+	word %...1..........1.
+	word %...1.........1..
+	word %....1.....111...
+	word %....1....1......
+	word %.....1111.......
+	word %................
+	
+spray_man_graphic
+;high res graphic
+	word %.......11111....
+	word %......1.....1...
+	word %......1.1...1...
+	word %.111.11.....1...
+	word %1111..1.....1...
+	word %.1.11..11111....
+	word %.1.1.1...1......
+	word %.1.1..1111......
+	word %.111.....11.....
+	word %.........1.1....
+	word %.........1..1...
+	word %........1.1..1..
+	word %.......1..1.....
+	word %....1.1....1....
+	word %.....1......1...
+	word %...........1....
+	
+	word %................
+	word %................
+	word %......11111.....
+	word %.....1.....1....
+	word %.....1.1...1....
+	word %....11.....1....
+	word %.....1.....1....
+	word %..111.11111.....
+	word %.1111...1.......
+	word %..1.111111......
+	word %..1.1...1.1.....
+	word %..1.1...1..1....
+	word %..111.111..1....
+	word %......1.1.......
+	word %......1.111.....
+	word %.....11...1.....
+	
+	word %.......11111....
+	word %......1.....1...
+	word %......1.1...1...
+	word %.111.11.....1...
+	word %1111..1.....1...
+	word %.1.11..11111..1.
+	word %.1.1.1...1...1..
+	word %.1.1..1111111...
+	word %.111.....1......
+	word %.........1......
+	word %.........1......
+	word %........1.1.....
+	word %.......1...1....
+	word %....1.1.....1...
+	word %.....1.......1..
+	word %............1...
+	
+	word %.....1..........
+	word %....1.1.........
+	word %...1...1..1.....
+	word %..1.....1.1.....
+	word %.1..1..1..1.....
+	word %..1...1..1......
+	word %...1.1.11.......
+	word %...11..11.......
+	word %.1....1..1......
+	word %111111....1.....
+	word %.1.1.......11111
+	word %1.1.1......1...1
+	word %...1.1.....1....
+	word %....1......1....
+	word %..........11....
+	word %................
+	
+	word %................
+	word %.....1..........
+	word %......1.......1.
+	word %.1111..11....1.1
+	word %1....1.1....1...
+	word %1....1.1...1....
+	word %1....111111.....
+	word %1.1..1.1...1....
+	word %1....1.1....1...
+	word %.1111..1.....1..
+	word %...1..1.......1.
+	word %.....1.......1..
+	word %...111111.......
+	word %...11...1.......
+	word %...111111.......
+	word %....1...........
+	
+	word %...1............
+	word %..1.......1.....
+	word %...1.....1.1....
+	word %....1...1.......
+	word %.....1.1........
+	word %......1.........
+	word %......1.........
+	word %......1.....111.
+	word %...1111111..1.1.
+	word %..1...1...1.1.1.
+	word %.1..11111..11.1.
+	word %...1.....1..1111
+	word %...1.....11.111.
+	word %...1...1.1......
+	word %...1.....1......
+	word %....11111.......
+	
+	word %...........1....
+	word %.......111111...
+	word %.......1...11...
+	word %.......111111...
+	word %..1.......1.....
+	word %.1.......1..1...
+	word %..1.....1..1111.
+	word %...1....1.1....1
+	word %....1...1.1..1.1
+	word %.....111111....1
+	word %....1...1.1....1
+	word %...1....1.1....1
+	word %1.1.....1..1111.
+	word %.1.......1......
+	word %..........1.....
+	word %................
+	
+	word %...1.1..........
+	word %....111...1.....
+	word %...1.1...1.1....
+	word %..1.11.11...1...
+	word %.1.1.1.1..1..1..
+	word %..1..1..1.....1.
+	word %......1..1...1..
+	word %.......11.1.1...
+	word %.......11..1....
+	word %......1..1......
+	word %1....1....111...
+	word %11111...........
+	word %....1...........
+	word %....1...........
+	word %....1...........
+	word %...11...........
+	
+spray_man_right_graphic
+	word %....11111.......
+	word %...1.....1......
+	word %...1...1.1......
+	word %...1.....11.111.
+	word %...1.....1..1111
+	word %....11111..11.1.
+	word %......1...1.1.1.
+	word %.....11111..1.1.
+	word %....1.1.....111.
+	word %...1..1.........
+	word %.....1.1........
+	word %....1...1.......
+	word %...1.....1.1....
+	word %..1.......1.....
+	word %...1............
+
+	word %....11111.......
+	word %...1.....1......
+	word %...1...1.1......
+	word %...1.....11.111.
+	word %...1.....1..1111
+	word %....11111..11.1.
+	word %......1...1.1.1.
+	word %.....11111..1.1.
+	word %.....11.....111.
+	word %.....11.........
+	word %......11........
+	word %......1.........
+	word %......1.........
+	word %.....11.........
+	word %....1.1.........
+	word %.....111........
+	
+spray_man_left_graphic
+	word %.......11111....
+	word %......1.....1...
+	word %......1.1...1...
+	word %.111.11.....1...
+	word %1111..1.....1...
+	word %.1.11..11111....
+	word %.1.1.1...1......
+	word %.1.1..11111.....
+	word %.111.....1.1....
+	word %.........1..1...
+	word %.........1..1...
+	word %........1.1.....
+	word %.......1..11....
+	word %....1.1.....1...
+	word %.....1.......1..
+	word %............1...
+	
+	word %.......11111....
+	word %......1.....1...
+	word %......1.1...1...
+	word %.111.11.....1...
+	word %1111..1.....1...
+	word %.1.11..11111....
+	word %.1.1.1...1......
+	word %.1.1..11111.....
+	word %.111.....11.....
+	word %.........11.....
+	word %........11......
+	word %.........1......
+	word %.........1......
+	word %.........11.....
+	word %.........1.1....
+	word %........111.....
+
+spray
+;high res graphic
+	word %..1111..........
+	word %.11.1.11........
+	word %11.1.1.1.1......
+	word %1.1.1.1.1.1.1...
+	word %11.1.1.1.1.1.1.1
+	word %1.1.1.1.1.1.1...
+	word %11.1.1.1.1......
+	word %.11.1.11........
+	word %..1111..........
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	
+sad_ball_graphic
+;high res graphic
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1...........1..
+	word %.1..11...11..1..
+	word %1..1111.1111..1.
+	word %1..1.11.1.11..1.
+	word %1...11...11...1.
+	word %1.............1.
+	word %1.............1.
+	word %.1....111....1..
+	word %.1...1...1...1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1......11...1..
+	word %.1.....1111..1..
+	word %1......11.1...1.
+	word %1...11..11....1.
+	word %1..1111.......1.
+	word %1..11.1....11.1.
+	word %1...11....1...1.
+	word %.1.......1...1..
+	word %.1......1....1..
+	word %..1.....1...1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1...11......1..
+	word %.1..1111.....1..
+	word %1...11.1...1..1.
+	word %1....11...1...1.
+	word %1.........1...1.
+	word %1....11...1...1.
+	word %1...1111...1..1.
+	word %.1..11.1.....1..
+	word %.1...11......1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.....1...1...
+	word %.1......1....1..
+	word %.1..11...1...1..
+	word %1..11.1...1...1.
+	word %1..1111....11.1.
+	word %1...11........1.
+	word %1......11.....1.
+	word %1.....11.1....1.
+	word %.1....1111...1..
+	word %.1.....11....1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1...1...1...1..
+	word %.1....111....1..
+	word %1.............1.
+	word %1.............1.
+	word %1...11...11...1.
+	word %1..11.1.11.1..1.
+	word %1..1111.1111..1.
+	word %.1..11...11..1..
+	word %.1...........1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1...1.....1...
+	word %.1....1......1..
+	word %.1...1...11..1..
+	word %1...1...1.11..1.
+	word %1.11....1111..1.
+	word %1........11...1.
+	word %1.....11......1.
+	word %1....1.11.....1.
+	word %.1...1111....1..
+	word %.1....11.....1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1......11...1..
+	word %.1.....1.11..1..
+	word %1..1...1111...1.
+	word %1...1...11....1.
+	word %1...1.........1.
+	word %1...1...11....1.
+	word %1..1...1.11...1.
+	word %.1.....1111..1..
+	word %.1......11...1..
+	word %..1.........1...
+	word %...11.....11....
+	word %.....11111......
+	
+	word %................
+	word %.....11111......
+	word %...11.....11....
+	word %..1.........1...
+	word %.1....11.....1..
+	word %.1...1111....1..
+	word %1....1.11.....1.
+	word %1.....11......1.
+	word %1........11...1.
+	word %1.11....1111..1.
+	word %1...1...1.11..1.
+	word %.1...1...11..1..
+	word %.1....1......1..
+	word %..1...1.....1...
+	word %...11.....11....
+	word %.....11111......

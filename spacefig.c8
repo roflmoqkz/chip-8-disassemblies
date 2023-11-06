@@ -1,0 +1,1886 @@
+;controls
+left_key equ 3
+right_key equ 12
+fire_key equ 10
+;enemy phases
+enemy_moving_right equ 0
+enemy_moving_down_on_right equ 1
+enemy_moving_left equ 2
+enemy_moving_down_on_left equ 3
+
+;jump past the copyright
+	jp start
+copyright
+	byte "SpaceFight2091 by Slammer/Anarchy!"
+	
+start
+;high resolution
+	high
+beginning
+;clear screen
+	cls
+	call process_game_over
+	call process_game
+;then jump to beginning
+	jp beginning
+
+;processes the entire game
+process_game
+;start at level 1
+	ld i,level_index
+	ld v0,0
+	ld [i],v0
+	ld v8,0
+copy_initial_level_data_loop
+;read 8 bytes
+	ld i,initial_level_data
+	add i,v8
+	ld v7,[i]
+;write 8 bytes
+	ld i,level_data
+	add i,v8
+	ld [i],v7
+;next set
+	add v8,8
+;loop until done
+	se v8,192
+	jp copy_initial_level_data_loop
+;load vars
+	ld i,level_index
+	ld v0,0
+;3 lives
+	ld v1,3
+	ld v2,0
+	ld [i],v2
+	call init_level
+main_loop
+	ld i,time_bonus
+	ld v0,[i]
+;check if time bonus ran out
+	sne v0,0
+	jp _ran_out
+;decrement time bonus
+	add v0,-1
+	ld [i],v0
+_ran_out
+	call wait_1
+	call process_spaceship
+	call check_bullet_wall_collision
+	call move_enemies
+	call handle_enemy_bullet
+;if an enemy exists, loop if lives exist
+	ld i,enemies_exist
+	ld v4,[i]
+	se v0,0
+	jp check_lives
+	se v1,0
+	jp check_lives
+	se v2,0
+	jp check_lives
+	se v3,0
+	jp check_lives
+	se v4,0
+	jp check_lives
+	call level_complete
+;move to next level
+	ld i,level_index
+	ld v0,[i]
+	add v0,32
+	ld [i],v0
+;go to game over if past level 6
+	sne v0,192
+	ret
+	call init_level
+	jp main_loop
+	
+check_lives
+;check if we have any lives remaining
+	ld i,lives
+	ld v0,[i]
+	se v0,0
+;ret brings us to the game over screen
+	jp main_loop
+	ret
+	
+;initializes the level
+init_level
+	call process_get_ready
+;load vars
+	ld i,spaceship_x
+;position of spaceship
+	ld v0,56
+;no bullet
+	ld v1,0
+	ld v2,0
+	ld [i],v2
+	ld i,enemy_pos
+;enemy position
+	ld v0,0
+	ld v1,0
+;all enemies exist
+	ld v2,1
+	ld v3,1
+	ld v4,1
+	ld v5,1
+	ld v6,1
+;enemy move timer
+	ld v7,5
+;enemy movement phase
+	ld v8,enemy_moving_right
+	ld v9,0
+;no enemy bullet
+	ld va,0
+	ld vb,0
+;5 cycles until first bullet
+	ld vc,5
+	ld [i],vc
+;init time bonus
+	ld i,time_bonus
+	ld v0,255
+	ld [i],v0
+	cls
+	call draw_lives_text
+	call draw_lives
+	call draw_score_text
+	call draw_score
+	call draw_spaceship
+	call draw_walls
+;don't check collision
+	ld v5,0
+	jp draw_enemies
+	
+;move to the next available enemy
+shift_firing_enemy
+	add v3,1
+	se v3,5
+	jp return_from_shifting
+	ld v3,0
+	jp return_from_shifting
+
+;moves on to the next level
+level_complete
+	ld i,time_bonus
+	ld v0,[i]
+	shr v0
+	shr v0
+	shr v0
+	ld [i],v0
+	call scroll_down_off_screen
+	call draw_lives_text
+	call draw_lives
+	call draw_score_text
+	call draw_score
+;position of time bonus text
+	ld v0,32
+	ld v1,25
+	ld i,time_bonus_text
+;increment by 8 because it is 8 tall
+	ld v2,8
+;count segments
+	ld v3,0
+draw_get_time_bonus_loop
+;draw text
+	drw v0,v1,8
+;next segment
+	add v0,8
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,8
+	jp draw_get_time_bonus_loop
+	call draw_time_bonus
+	call wait_12
+	call wait_12
+;check if we have any time bonus
+	ld i,time_bonus
+	ld v0,[i]
+	sne v0,0
+	ret
+transfer_points_loop
+;hide time bonus and score
+	call draw_time_bonus
+	call draw_score
+;transfer one point from time bonus to score
+	ld i,time_bonus
+	ld v0,[i]
+	add v0,-1
+	ld [i],v0
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+;reshow time bonus and score
+	call draw_time_bonus
+	call draw_score
+;play beep
+	ld v0,1
+	ld st,v0
+	call wait_1
+;check if we have any time bonus remaining
+	ld i,time_bonus
+	ld v0,[i]
+	sne v0,0
+	jp transfer_points_loop
+	call wait_12
+	call wait_12
+	ret
+	
+;shoots enemy bullet if needed and	
+handle_enemy_bullet
+;check if bullet already exists
+	ld i,enemy_bullet_pos
+	ld v2,[i]
+	se v0,0
+	jp bullet_already_exists
+;decrement timer
+	add v2,-1
+	ld [i],v2
+;check if timer ran out
+	se v2,0
+	ret
+;new timer is 7-level which is 192-(li/32)
+	ld i,level_index
+	ld v0,[i]
+	ld v2,192
+	sub v2,v0
+	shr v2
+	shr v2
+	shr v2
+	shr v2
+	shr v2
+	ld v0,v2
+	ld i,c52
+	ld [i],v0
+;random enemy 0-4 with 1-3 being more common
+	rnd v3,3
+	rnd v4,1
+	add v3,v4
+return_from_shifting
+	ld i,enemies_exist
+	add i,v3
+;check if enemy exists
+	ld v0,[i]
+	sne v0,0
+	jp shift_firing_enemy
+;get enemy x position
+	ld i,enemy_offsets
+	add i,v3
+	ld v0,[i]
+	ld v3,v0
+	ld i,enemy_pos
+	ld v1,[i]
+	add v0,v3
+;get center of enemy by adding 7
+	add v0,7
+;offset y by 25
+	add v1,25
+	ld i,enemy_bullet_pos
+	ld [i],v2
+;play beep
+	ld v0,2
+	ld st,v0
+	jp move_enemies
+	
+bullet_already_exists
+;hide enemy bullet
+	call draw_enemy_bullet
+;move it down
+	ld v1,4
+	ld i,enemy_bullet_pos
+	ld [i],v1
+;redraw bullet
+	call draw_enemy_bullet
+;check if bullet hit bottom of screen
+	sne v1,64
+	jp remove_enemy_bullet
+	sne v1,63
+	jp remove_enemy_bullet
+	sne v1,62
+	jp remove_enemy_bullet
+	sne v1,61
+	jp remove_enemy_bullet
+;check if bullet in wall area
+	sne v1,43
+	jp enemy_bullet_in_wall_area
+	sne v1,42
+	jp enemy_bullet_in_wall_area
+	sne v1,41
+	jp enemy_bullet_in_wall_area
+	sne v1,40
+	jp enemy_bullet_in_wall_area
+	sne v1,39
+	jp enemy_bullet_in_wall_area
+;check collision
+	sne vf,0
+	ret
+	ld v2,v0
+	ld v3,v1
+;check if player bullet exists
+	ld i,player_bullet_pos
+	ld v1,[i]
+	sne v0,0
+	jp no_bullet_collision
+;check if the x values are the same
+	se v0,v2
+	jp no_bullet_collision
+;increment score
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+;play beep
+	ld v0,1
+	ld st,v0
+	call draw_player_bullet
+;remove player bullet
+	ld i,player_bullet_pos
+	ld v0,0
+	ld v1,0
+	ld [i],v1
+	jp remove_enemy_bullet
+	
+no_bullet_collision
+;count flashes
+	ld va,0
+flash_lives_loop
+;flash last life
+	call decrement_lives
+	call increment_lives
+;next flash
+	add va,1
+;loop until done
+	se va,5
+	jp flash_lives_loop
+	call decrement_lives
+	jp remove_enemy_bullet
+
+enemy_bullet_in_wall_area
+	ld v2,v0
+	ld v3,v0
+;get bullet track
+	shr v2
+	shr v2
+	shr v2
+;check if there is a wall there
+	ld i,level_index
+	ld v0,[i]
+	ld i,level_data
+	add i,v0
+	add i,v2
+	ld v0,[i]
+;if not, quit
+	sne v0,0
+	ret
+;decrement wall health
+	ld v0,[i]
+	add v0,-1
+	ld v2,v0
+	ld v0,0
+	ld [i],v0
+;check if wall destroyed
+	sne v2,0
+	jp player_wall_destroyed
+;write new health
+	ld v0,v2
+	ld [i],v0
+;mark wall hit
+	ld v2,16
+	add i,v2
+	ld v0,0
+	ld [i],v0
+	jp player_wall_processed
+player_wall_destroyed
+;get cooresponding wall position
+	ld v0,#f8
+	and v0,v3
+	ld v1,47
+;hide wall
+	ld i,wall
+	drw v0,v1,4
+player_wall_processed
+;hide player bullet
+	call draw_player_bullet
+	ld i,player_bullet_pos
+	jp remove_player_bullet
+
+remove_enemy_bullet
+;remove enemy bullet
+	call remove_enemy_bullet
+;clear enemy bullet from memory
+	ld i,enemy_bullet_pos
+	ld v0,0
+	ld v1,0
+	ld [i],v1
+	ret
+
+;increment the amount of lives
+increment_lives
+	ld v9,1
+	jp change_lives
+	
+;decrement the amount of lives
+decrement_lives
+	ld v9,-1
+	jp change_lives
+
+change_lives
+;hide lives
+	call draw_lives
+;play beep
+	ld v0,1
+	ld st,v0
+;increment/decrement lives
+	ld i,lives
+	ld v0,[i]
+	add v0,v9
+	ld [i],v0
+;redraw lives
+	call draw_lives
+	jp wait_6
+	
+;draws the enemy bullet
+draw_enemy_bullet
+	ld i,enemy_bullet_pos
+	ld v1,[i]
+	ld i,bullet
+	drw v0,v1,3
+	
+;moves the enemies if the timer is over
+move_enemies
+;decrement enemy timer
+	ld i,enemy_timer
+	ld v0,[i]
+	add v0,-1
+;check if reached 0
+	se v0,0
+	ret
+;reset timer
+	ld v0,5
+	ld [i],v0
+;don't check collision
+	ld v5,0
+;hide all enemies
+	call draw_enemies
+	call do_move_enemies
+;redraw enemies and check collision
+	ld v5,1
+	jp draw_enemies
+	
+;actually move the enemies
+do_move_enemies
+	ld i,c4e
+	ld v1,[i]
+	sne v0,enemy_moving_right
+	jp move_enemy_right
+	sne v0,enemy_moving_down_on_right
+	jp move_enemiy_down
+	sne v0,enemy_moving_left
+	jp move_enemy_left
+;play long beep
+	ld v0,10
+	ld st,v0
+;move enemies down if y isn't 12
+	ld i,enemy_pos_y
+	ld v0,[i]
+	se v0,12
+	add v0,1
+	ld [i],v0
+;increment down timer
+	add v1,1
+	ld i,enemy_down_timer
+	ld v0,v1
+	ld [i],v0
+;check if reached 4
+	se v1,4
+	ret
+;make the enemies move right
+	ld v0,enemy_moving_right
+	ld v1,0
+	ld [i],v1
+	ret
+	
+move_enemiy_down
+;play long beep
+	ld v0,10
+	ld st,v0
+;move enemies down if y isn't 12
+	ld i,enemy_pos_y
+	ld v0,[i]
+	se v0,12
+	add v0,1
+	ld [i],v0
+;increment down timer
+	add v1,1
+	ld i,enemy_down_timer
+	ld v0,v1
+	ld [i],v0
+;check if reached 4
+	se v1,4
+	ret
+;make the enemies move left
+	ld v0,enemy_moving_left
+	ld v1,0
+	ld [i],v1
+	ret
+	
+move_enemy_left
+	ld i,enemy_pos
+;move left
+	ld v0,[i]
+	add v0,-4
+	ld [i],v0
+;check if reached the end
+	se v0,0
+	ret
+;make enemy move down
+	ld i,enemy_phase
+	ld v0,enemy_moving_down_on_left
+	ld [i],v0
+
+move_enemy_right
+	ld i,enemy_pos
+;move right
+	ld v0,[i]
+	add v0,4
+	ld [i],v0
+;check if reached the end
+	se v0,40
+	ret
+;make enemy move down
+	ld i,enemy_phase
+	ld v0,enemy_moving_down_on_right
+	ld [i],v0
+	ret
+
+;draws all enemies and checks collision if v5 is not 0
+draw_enemies
+;get position of enemies
+	ld i,enemy_pos
+	ld v1,[i]
+	ld v7,v1
+	ld v6,v0
+;offset y by 9
+	add v7,9
+;current enemy
+	ld v8,0
+;get level index
+	ld i,level_index
+	ld v0,[i]
+	ld v9,v0
+draw_enemies_loop
+	ld i,enemies_exist
+	add i,v8
+	ld v0,[i]
+;draw appropriate graphic
+	ld i,enemies_exist
+	ld i,v9
+	se v0,0
+	drw v6,v7,0
+;check collision
+	se vf,0
+	call handle_collision
+;next enemy
+	add v6,18
+	add v8,1
+;loop until done
+	se v8,5
+	jp draw_enemies_loop
+handle_collision
+;check if we are handling collision (and not hiding)
+	sne v5,0
+	ret
+;hide the enemy
+	drw v6,v7,0
+;mark enemy no longer exists
+	ld i,enemies_exist
+	add i,v8
+	ld v0,0
+	ld [i],v0
+;hide score
+	call draw_score
+;add 2 points
+	ld i,score
+	ld v0,[i]
+	add v0,2
+	ld [i],v0
+;redraw score
+	call draw_score
+;hide player bullet
+	call draw_player_bullet
+	ld i,player_bullet_pos
+	jp remove_player_bullet
+
+;check if bullet hit walls
+check_bullet_wall_collision
+	ld i,player_bullet_pos
+;check if bullet exists
+	ld v1,[i]
+	sne v0,0
+	ret
+;check if it at wall level (in an inefficient way)
+	sne v1,44
+	jp bullet_low
+	sne v1,45
+	jp bullet_low
+	sne v1,46
+	jp bullet_low
+	se v1,47
+	jp bullet_low
+	ret
+	ld v2,v0
+	ld v3,v0
+;get bullet track
+	shr v2
+	shr v2
+	shr v2
+;check if there is a wall there
+	ld i,level_index
+	ld v0,[i]
+	ld i,level_data
+	add i,v0
+	add i,v2
+;if it doesn't quit
+	ld v0,[i]
+	sne v0,0
+	ret
+;sub 1 from wall health
+	ld v0,[i]
+	add v0,-1
+	ld v2,v0
+	ld v0,0
+	ld [i],v0
+;check if wall destroyed
+	sne v2,0
+	jp player_wall_destroyed
+;write new health
+	ld v0,v2
+	ld [i],v0
+;mark wall hit
+	ld v2,16
+	add i,v2
+	ld v0,0
+	ld [i],v0
+	jp player_wall_processed
+player_wall_destroyed
+;get cooresponding wall position
+	ld v0,#f8
+	and v0,v3
+	ld v1,47
+;hide wall
+	ld i,wall
+	drw v0,v1,4
+player_wall_processed
+;hide player bullet
+	call draw_player_bullet
+	ld i,player_bullet_pos
+	jp remove_player_bullet
+	
+;fires the bullet if the key is pressed and there is no bullet
+fire_bullet
+;check if fire key was pressed
+	ld v0,fire_key
+	skp v0
+;quit if it wasn't
+	ret
+;check if there is already a bullet
+	ld i,player_bullet_pos
+	ld v0,[i]
+	se v0,0
+	ret
+;bullet is 7 right to the ship's left
+	ld i,spaceship_x
+	ld v0,[i]
+	add v0,7
+;write bullet position
+	ld i,player_bullet_pos
+	ld v1,46
+	ld [i],v1
+	call draw_player_bullet
+;play beep
+	ld v0,1
+	ld st,v0
+	ret
+	
+;draws the bullet if it exists
+draw_player_bullet
+;load bullet pos
+	ld i,player_bullet_pos
+	ld v1,[i]
+	ld i,bullet
+;check if bullet exists
+	se v0,0
+;draw bullet
+	drw v0,v1,3
+	ret
+
+;moves the player bullet up and check collision
+process_player_bullet
+;hide bullet
+	call draw_player_bullet
+;move bullet up
+	ld i,player_bullet_pos
+	add v1,-2
+;check if we reached top
+	sne v1,8
+	jp remove_player_bullet
+;twice because we move 2 at a timer
+	sne v1,9
+	jp remove_player_bullet
+;write bullet pos
+	ld [i],v1
+;redraw player bullet
+	call draw_player_bullet
+	se v0,0
+;check bullet collision
+	sne vf,0
+	ret
+;hide enemies
+	ld v5,0
+	call draw_enemies
+	ret
+
+;remove the player bullet from memory
+remove_player_bullet
+	ld v0,0
+	ld v1,0
+	ld [i],v1
+	ret
+	
+;moves and shoots
+process_spaceship
+	call fire_bullet
+	call process_player_bullet
+;check left key
+	ld v0,left_key
+	sknp v0
+	jp move_ship_left
+;check right key
+	ld v0,right_key
+	sknp v0
+	jp move_ship_right
+	ret
+move_ship_right
+	ld i,spaceship_x
+	ld v0,[i]
+;check if on right side
+	sne v0,112
+	ret
+;hide ship
+	call draw_spaceship
+;move right
+	add v0,1
+	ld i,spaceship_x
+	ld [i],v0
+;redraw ship
+	call draw_spaceship
+	ret	
+move_ship_left
+	ld i,spaceship_x
+	ld v0,[i]
+;check if on left side
+	sne v0,0
+	ret
+;hide ship
+	call draw_spaceship
+;move left
+	add v0,-1
+	ld i,spaceship_x
+	ld [i],v0
+;redraw ship
+	call draw_spaceship
+	ret
+	
+;658
+;draws the spaceship
+draw_spaceship
+	ld i,c43
+	ld v0,[i]
+	ld v1,49
+	ld i,spaceship
+	ret
+
+;draws the time bonus number
+draw_time_bonus
+	ld i,time_bonus
+	ld v0,[i]
+;position of time bonus
+	ld v3,57
+	ld v4,32
+	jp draw_number
+	
+;draws the score number
+draw_score
+	ld i,score
+	ld v0,[i]
+;position of score
+	ld v3,34
+	ld v4,3
+draw_number
+;get number digits
+	ld i,bcd_target
+	bcd v0
+;draw hundreds digit
+	ld f,v0
+	call draw_digit
+;draw tens digit
+	ld f,v1
+	call draw_digit
+;draw units digit
+	ld f,v2
+	
+draw_digit
+;draws the digit and advances x
+	drw v3,v4,5
+	add v3,5
+	ret
+
+;draws the life markers	
+draw_lives
+;check if we have lives
+	ld i,lives
+	ld v0,[i]
+	sne v0,0
+;quit if we don't
+	ret
+;position of lives
+	ld v1,77
+	ld v2,1
+;draw lives
+	ld i,life_marker
+draw_lives_loop
+	drw v1,v2,7
+;next life marker
+	add v1,8
+	add v0,-1
+;loop until done
+	se v0,0
+	jp draw_lives_loop
+	ret
+
+;draws the lives text	
+draw_lives_text
+;position of lives text
+	ld v0,101
+	ld v1,0
+	ld i,lives_text
+draw_text
+;increment by 8 because it is 8 tall
+	ld v2,8
+;count segments
+	ld v3,0
+draw_lives_text_loop
+;draw text
+	drw v0,v1,8
+;next segment
+	add v0,8
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,4
+	jp draw_lives_text_loop
+	ret
+
+;draws the score text
+draw_score_text
+;position of score text
+	ld v0,0
+	ld v1,0
+;draw the text
+	ld i,score_text
+	jp draw_text
+	
+;draws the walls of the level
+draw_walls
+;position of leftmost wall
+	ld v1,0
+	ld v2,44
+;count tiles
+	ld v3,0
+;get level index
+	ld i,level_index
+	ld v0,[i]
+	ld v4,v0
+draw_walls_loop
+;get tile
+	ld i,level_data
+	add i,v4
+	add i,v3
+	ld v0,[i]
+	ld i,wall
+;check if drawing needed
+	se v0,0
+;if so, draw wall
+	drw v1,v2,4
+;next tile
+	add v1,8
+	add v3,1
+;loop until done
+	se v3,10
+	jp draw_walls_loop
+	ret
+
+;processes the get ready screen
+process_get_ready
+	call scroll_left_off_screen
+	call draw_get_ready_text
+	call draw_level
+	call 6f6
+	call scroll_right_off_screen
+	ret
+	
+;plays the get ready melody
+play_get_ready_melody
+;play a melody by waiting for different amounts
+	call beep
+	call wait_12
+	call beep
+	call wait_6
+	call beep
+	call wait_6
+	call beep
+	call wait_12
+	call beep
+	call wait_12
+	call beep
+	jp wait_12
+	
+;play beep for 3 frames
+beep
+	ld v0,3
+	ld st,v0
+	ret
+	
+;draws the get ready text
+draw_get_ready_text
+;position of get ready text
+	ld v0,32
+	ld v1,12
+	ld i,get_ready_text
+;increment by 8 because it is 8 tall
+	ld v2,8
+;count segments
+	ld v3,0
+draw_get_ready_text_loop
+;draw text
+	drw v0,v1,8
+;next segment
+	add v0,8
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,8
+	jp draw_lives_text_loop
+	ret
+
+;draws the level text and number
+draw_level
+;position of get lives text
+	ld v0,48
+	ld v1,32
+	ld i,level_text
+;increment by 8 because it is 8 tall
+	ld v2,8
+;count segments
+	ld v3,0
+draw_get_level_text_loop
+;draw text
+	drw v0,v1,8
+;next segment
+	add v0,8
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,4
+	jp draw_level_text_loop
+	ld i,level_index
+;divide by 32 and add 1 to get level
+	ld v0,[i]
+	shr v0
+	shr v0
+	shr v0
+	shr v0
+	shr v0
+	add v0,1
+;load level number
+	ld hf,v0
+;position of level number
+	ld v0,59
+	ld v1,41
+;draw level number
+	ld v0,v1,10
+	ret
+
+;scrolls the screen to the left off bounds
+scroll_left_off_screen
+;count scroll
+	ld v1,0
+scroll_left_off_screen_loop
+	call wait_1
+;scroll left 4 pixels
+	scl
+;repeat until scrolled off screen
+	add v1,1
+	se v1,32
+	jp scroll_left_off_screen_loop
+	ret
+
+;scrolls the screen to the right off bounds	
+scroll_right_off_screen
+;count scroll
+	ld v1,0
+scroll_right_off_screen_loop
+	call wait_1
+;scroll right 4 pixels
+	scr
+;repeat until scrolled off screen
+	add v1,1
+	se v1,32
+	jp scroll_right_off_screen_loop
+	ret
+	
+;scrolls the screen to downwards off bounds	
+scroll_down_off_screen
+;count scroll
+	ld v1,0
+scroll_down_off_screen_loop
+	call wait_1
+;scroll down 4 pixels
+	scd 4
+;repeat until scrolled off screen
+	add v1,1
+	se v1,16
+	jp scroll_down_off_screen_loop
+	ret
+	
+;processes the game over screen
+process_game_over
+;init game over timer
+	ld i,game_over_timer
+	ld v0,100
+	ld [i],v0
+	call draw_game_over
+	call draw_lives_text
+	call draw_lives
+	call draw_score_text
+	call draw_score
+	call draw_dots
+game_over_loop
+	call wait_frame
+	call randomize_dot
+	call check_swap_text
+;check if start key pressed
+	ld v0,fire_key
+	skp v0
+;loop until pressed
+	jp game_over_loop
+	ret
+	
+;check if the timer runs out and swap text if needed
+check_swap_text
+	ld i,game_over_timer
+;decrement game over timer
+	ld v0,[i]
+	ld v0,-1
+	ld [i],v0
+;quit of not done
+	se v0,0
+	ret
+;restart game over timer
+	ld v0,100
+	ld [i],v0
+;hide game over
+	call draw_game_over
+	ld i,b39
+;position of 
+	ld v0,16
+	ld v1,24
+;increment by 32 everytime because every segment is 32 bytes long
+	ld v2,32
+;count segments
+	ld v3,0
+draw_spacefight_2091_text_loop
+;draw text
+	drw v0,v1,0
+;next segment
+	add v0,16
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,6
+	jp draw_spacefight_2091_text_loop
+	ret
+	
+;draws the game over text
+draw_game_over
+	ld i,game_over_text
+;position of game over text
+	ld v0,32
+	ld v1,24
+;increment by 32 everytime because every segment is 32 bytes long
+	ld v2,32
+;count segments
+	ld v3,0
+draw_game_over_loop
+;draw text
+	drw v0,v1,0
+;next segment
+	add v0,16
+	add i,v2
+	add v3,1
+;loop until done
+	se v3,4
+	jp draw_game_over_loop
+	ret
+	
+;draws all dots in the dot table
+draw_dots
+	ld i,c56
+	ld v0,0
+	ld [i],v0
+	ld v2,v0
+;count the number of dots drawmn
+	ld v4,0
+draw_dots_loop
+	call draw_dot
+;next dot
+	add v2,1
+	ld v0,v2
+	add v4,1
+;loop until done
+	se v4,16
+	jp draw_dots_loop
+	ret
+
+;changes the current dot and moves to the next one
+randomize_dot
+	ld i,current_dot
+	ld v0,[i]
+	ld v2,v0
+;hide previous dot
+	ld v4,v0
+	call draw_dot
+;get dot from table
+	ld i,dot_locs_table
+	shl v2
+	add i,v2
+;change it to a random position
+	rnd v0,127
+	rnd v0,63
+	ld [i],v1
+;draw new dot
+	ld i,dot
+	drw v0,v1,1
+;next dot
+	ld v3,15
+	add v4,1
+;wrap around
+	and v4,v3
+;store dot
+	ld v0,v4
+	ld i,current_dot
+	ld [i],v0
+	ret
+	
+;draws dot in loc table in position v0
+draw_dot
+	ld i,dot_locs_table
+;multiply index by 2 because every loc is 2 bytes
+	shl v0
+	add i,v0
+;get position of dot
+	ld v1,[i]
+;draw dot
+	ld i,dot
+	drw v0,v1,1
+	ret
+
+;waits 12 frames
+wait_12
+	ld v0,12
+	jp wait_loop
+	
+;waits 6 frames
+wait_6
+	ld v0,6
+	jp wait_loop
+
+;wait a single frame
+wait_1
+;store a frame in the timer
+	ld v0,1
+	ld dt,v0
+wait_loop
+;loop until done
+	ld v0,dt
+	se v0,0
+	jp wait_1_loop
+	ret
+
+;location of dots to be initially drawn (x then y)
+dot_locs_table
+	byte 10,17,  91,34,  91,41,  117,56
+	byte 84,17,  12,9,   52,19,  120,52
+	byte 38,4,   6,22,   12,34,  32,10
+	byte 0,22,   6,5,    63,7,   0,30
+
+;the offset of the enemy x position
+enemy_offsets
+	byte 0,18,36,54,72
+
+initial_level_data
+;each level is 32 bytes, the first 16 is the health of every wall 0-no wall
+;the second is whether the wall has been hit or not, it is unused
+;level 1
+	byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+;level 2
+	byte 0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0
+	byte 0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0
+;level 3
+	byte 0,0,0,2,2,2,0,0,0,0,1,1,1,0,0,0
+	byte 0,0,0,1,1,1,0,0,0,0,1,1,1,0,0,0
+;level 4
+	byte 0,5,5,0,0,0,5,0,0,5,0,0,0,5,5,0
+	byte 0,1,1,0,0,0,1,0,0,1,0,0,0,1,1,0
+;level 5
+	byte 10,10,0,0,10,10,0,0,0,0,10,10,0,0,10,10
+	byte 01,01,0,0,01,01,0,0,0,0,01,01,0,0,01,01
+;level 6
+	byte 20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20
+	byte 01,01,01,01,01,01,01,01,01,01,01,01,01,01,01,01
+
+game_over_text
+;high res graphic
+	word %..1111..........
+	word %.11111..........
+	word %111.............
+	word %11..............
+	word %11..11...111...1
+	word %11..11..11111.11
+	word %11..11.111.11.11
+	word %11..11.11..11.11
+	word %11..11.11..11.11
+	word %111111.111111.11
+	word %.11111..11111.11
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+	
+	word %................
+	word %................
+	word %................
+	word %................
+	word %1111....111.....
+	word %11111..11111....
+	word %.11111.11..11...
+	word %.11.11.111111...
+	word %.11.11.11.......
+	word %.11.11.111111...
+	word %.11.11..11111...
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+	
+	word %..111...........
+	word %.11111..........
+	word %111.11..........
+	word %11..11..........
+	word %11..11.11..11..1
+	word %11..11.11..11.11
+	word %11..11.11..11.11
+	word %11..11.11..11.11
+	word %11..11.11..11.11
+	word %111111..1111..11
+	word %.1111....11....1
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+	
+	word %.............111
+	word %.............111
+	word %.............11.
+	word %.............11.
+	word %11.....111..11..
+	word %111...1111..11..
+	word %..11.111....1...
+	word %1111.11.....1...
+	word %.....11.........
+	word %1111.11....11...
+	word %1111.11....11...
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+
+time_bonus_text
+	byte %111111.1
+	byte %111111.1
+	byte %...1...1
+	byte %..11...1
+	byte %..11...1
+	byte %..11...1
+	byte %..11...1
+	byte %..11...1
+	
+	byte %1.1....1
+	byte %1.11..11
+	byte %1.111111
+	byte %1.111111
+	byte %1.11..11
+	byte %1.11..11
+	byte %1.11..11
+	byte %1.11..11
+	
+	byte %...111..
+	byte %..1111..
+	byte %.111....
+	byte %.11.....
+	byte %.1111...
+	byte %.11.....
+	byte %.11111..
+	byte %..1111..
+	
+	byte %....111.
+	byte %...11111
+	byte %...11.11
+	byte %...11..1
+	byte %...11111
+	byte %...11..1
+	byte %...11111
+	byte %...11111
+	
+	byte %....111.
+	byte %...11111
+	byte %1.111.11
+	byte %1.11..11
+	byte %..11..11
+	byte %1.11..11
+	byte %1.111111
+	byte %...1111.
+	
+	byte %.11..11.
+	byte %.111.11.
+	byte %.111111.
+	byte %.11.111.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	
+	byte %11..11..
+	byte %11..11..
+	byte %11..11.1
+	byte %11..11.1
+	byte %11..11..
+	byte %111.11..
+	byte %.11111.1
+	byte %..1111.1
+	
+	byte %.111....
+	byte %1111..11
+	byte %1.....11
+	byte %111.....
+	byte %1111....
+	byte %..11..11
+	byte %1111..11
+	byte %111.....
+
+level_text
+	byte %11......
+	byte %11.....1
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %111...11
+	byte %.1111.11
+	byte %..111..1
+	
+	byte %111.11..
+	byte %111.11..
+	byte %1...11..
+	byte %....11..
+	byte %11..11..
+	byte %....1111
+	byte %111..111
+	byte %111...11
+	
+	byte %11...111
+	byte %11..1111
+	byte %11.111..
+	byte %11.11...
+	byte %11.1111.
+	byte %11.11...
+	byte %1..11111
+	byte %....1111
+	
+	byte %.11.....
+	byte %.11.....
+	byte %.11.....
+	byte %.11.....
+	byte %.11.....
+	byte %.111....
+	byte %..1111..
+	byte %...111..
+
+enemies
+;high res graphics
+;level 1
+	word %................
+	word %1..1.11111.1..1.
+	word %......111.......
+	word %.......1........
+	word %....1111111.....
+	word %..11111111111...
+	word %.1.1.1.1.1.1.1..
+	word %1.1.1.111.111.1.
+	word %11111111.11.111.
+	word %1.111.1.1.111.1.
+	word %.1.1.1.1.1.1.1..
+	word %..11111111111...
+	word %.1..1111111..1..
+	word %................
+	word %1.............1.
+	word %................
+	
+;level 2
+	word %......1111......
+	word %.....11..11.....
+	word %.....1..1.1.....
+	word %......1111......
+	word %.....1....1.....
+	word %....1.11..11....
+	word %...1.1...1.11...
+	word %...1.1....1.1...
+	word %...1.....1.11...
+	word %...1..1.1.1.1...
+	word %....11.1.1.1....
+	word %...1.11.1.1.1...
+	word %..1...1111...1..
+	word %.11111111111111.
+	word %.1............1.
+	word %................
+	
+;level 3
+	word %.1..1.1.1.1.1.1.
+	word %...1.1.1.1.1....
+	word %.1..1.1.1.1.1.1.
+	word %11.1.1.1.1.1..11
+	word %111..1....1..111
+	word %.11111111111111.
+	word %..111..11..111..
+	word %....11....11....
+	word %.....11..11.....
+	word %.....111111.....
+	word %..11..1111..11..
+	word %..1.1.1111.1.1..
+	word %.....111111.....
+	word %......1111......
+	word %.......11.......
+	word %................
+	
+;level 4
+	word %......1111......
+	word %.....1.1.11.....
+	word %.....11.1.1.....
+	word %......1111......
+	word %...11.1111.11...
+	word %..1.11.1.111.1..
+	word %.1.1111.1.111.1.
+	word %1.1..1.1.11..1.1
+	word %11...11.1.1...11
+	word %11...111111...11
+	word %11..11.11.11..11
+	word %11.11.1..1.11.11
+	word %.1.1.1....1.1.1.
+	word %...11......11...
+	word %...11......11...
+	word %..11........11..
+	
+;level 5
+	word %..11........11..
+	word %.1..1......1..1.
+	word %1.1..1....1..1.1
+	word %1....1....1....1
+	word %.1..11....11..1.
+	word %..11..1..1..11..
+	word %......1..1......
+	word %...1111111111...
+	word %..1.....1.1.11..
+	word %..1.1....1.1.1..
+	word %..1.....1.1.11..
+	word %...1111111111...
+	word %.11111111111111.
+	word %1..1..1..1..1..1
+	word %1..1..1..1..1..1
+	word %1..1..1..1..1..1
+	
+;level 6
+	word %..111111111111..
+	word %.1............1.
+	word %.1.11.1.11111.1.
+	word %.1.1........1.1.
+	word %.1....11111.1.1.
+	word %.1.1..1..1..1.1.
+	word %.1...11111..1.1.
+	word %.1.1........1.1.
+	word %.1.1111111111.1.
+	word %.1............1.
+	word %..111111111111..
+	word %....11111111....
+	word %..111......111..
+	word %.1.1.1....11.11.
+	word %1.1.11....1.1.11
+	word %11111......11111
+
+spaceship
+;high res graphic
+	byte %.......1........
+	byte %.......1........
+	byte %.......1........
+	byte %.......1........
+	byte %.......1........
+	byte %......111.......
+	byte %......111.......
+	byte %......111.......
+	byte %.....11111......
+	byte %11...11.11...11.
+	byte %.11111.1.11111..
+	byte %..11111111111...
+	byte %.1111111111111..
+	byte %11....111....11.
+	byte %.......1........
+	byte %................
+
+life_marker
+	byte %...1....
+	byte %...1....
+	byte %...1....
+	byte %..1.1...
+	byte %.11111..
+	byte %11.1.11.
+	byte %1111111.
+
+bullet
+	byte %1.......
+	byte %1.......
+	byte %1.......
+
+score_text
+	byte %..111...
+	byte %.1111..1
+	byte %11....11
+	byte %1111..11
+	byte %.1111.11
+	byte %...11.11
+	byte %11111.11
+	byte %1111...1
+	
+	byte %111...11
+	byte %111..111
+	byte %1...111.
+	byte %....11..
+	byte %....11..
+	byte %....11..
+	byte %111.1111
+	byte %111..111
+	
+	byte %1...111.
+	byte %11.11111
+	byte %11.11.11
+	byte %11.11..1
+	byte %11.11111
+	byte %11.11111
+	byte %11.11.11
+	byte %1..11..1
+	
+	byte %....111.
+	byte %...1111.
+	byte %1.111...
+	byte %1.11....
+	byte %1.1111..
+	byte %..11....
+	byte %1.11111.
+	byte %1..1111.
+	
+lives_text
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %111...11
+	byte %.1111.11
+	byte %..111.11
+	
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.11..11.
+	byte %.111111.
+	byte %..1111..
+	byte %...11...
+	
+	byte %..111...
+	byte %.1111..1
+	byte %111...11
+	byte %11....11
+	byte %1111...1
+	byte %11......
+	byte %11111.11
+	byte %.1111.11
+	
+	byte %111.....
+	byte %111.....
+	byte %........
+	byte %11......
+	byte %111.....
+	byte %.11.....
+	byte %111.....
+	byte %11......
+
+spacefight_2091_text
+;high res graphic
+	word %..1111..........
+	word %.11111..........
+	word %111.............
+	word %11..............
+	word %1111...1111.....
+	word %.1111..11111...1
+	word %...111.11.111.11
+	word %....11.11..11.11
+	word %....11.11..11.11
+	word %111111.111111.11
+	word %11111..11111...1
+	word %.......11.......
+	word %.......11.......
+	word %.......11.......
+	word %111111....111111
+	word %1111111111111111
+	
+	word %................
+	word %................
+	word %................
+	word %................
+	word %111....111..111.
+	word %1111..1111.11111
+	word %1.11.111...11..1
+	word %..11.11....11111
+	word %..11.11....11...
+	word %1111.11111.11111
+	word %1111..1111..1111
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+	
+	word %....1111........
+	word %...11111........
+	word %..111...........
+	word %..11............
+	word %..11111.11...111
+	word %..11111.11..1111
+	word %1.11.......111.1
+	word %1.11....11.11..1
+	word %..11....11.11..1
+	word %1.11....11.11111
+	word %1.11....11..1111
+	word %...............1
+	word %............1111
+	word %............1111
+	word %11111111111.....
+	word %1111111111111111
+	
+	word %..11.....11.....
+	word %..11.....11.....
+	word %..11.....11.....
+	word %..11.....11.....
+	word %..1111...1111...
+	word %1.11111..1111...
+	word %1.11.111.11.....
+	word %1.11..11.11.....
+	word %1.11..11.111....
+	word %1.11..11..1111..
+	word %1.11..11...111..
+	word %1...............
+	word %1...............
+	word %................
+	word %.111111111111111
+	word %1111111111111111
+	
+	word %..1111....1111..
+	word %.111111..111111.
+	word %111..11.11...11.
+	word %11...11.11...11.
+	word %....111.11...11.
+	word %...111..11...11.
+	word %..111...11...11.
+	word %.111....11...11.
+	word %111.....11...11.
+	word %1111111.1111111.
+	word %1111111..11111..
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+	
+	word %..1111..11...111
+	word %.111111.11...111
+	word %111..11.11...11.
+	word %11...11.11...11.
+	word %11...11.11..11..
+	word %1111111.11..11..
+	word %.111111.11..1...
+	word %.....11.11..1...
+	word %.....11.11......
+	word %1111111.11.11...
+	word %111111..11.11...
+	word %................
+	word %................
+	word %................
+	word %1111111111111111
+	word %1111111111111111
+
+get_ready_text
+	byte %..1111..
+	byte %.11111..
+	byte %111....1
+	byte %11.....1
+	byte %11..11.1
+	byte %11..11.1
+	byte %111111.1
+	byte %.11111..
+	
+	byte %.111.111
+	byte %1111.111
+	byte %11......
+	byte %1......1
+	byte %111....1
+	byte %1......1
+	byte %1111...1
+	byte %1111...1
+	
+	byte %111.....
+	byte %111.....
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	
+	byte %1111....
+	byte %11111...
+	byte %11.111.1
+	byte %11..11.1
+	byte %111111.1
+	byte %11111..1
+	byte %11.111.1
+	byte %11..11..
+	
+	byte %.111...1
+	byte %1111..11
+	byte %11...111
+	byte %1....11.
+	byte %111..111
+	byte %1....11.
+	byte %1111.11.
+	byte %1111.11.
+	
+	byte %11...111
+	byte %111.1111
+	byte %.11.11.1
+	byte %.11.11..
+	byte %111.11..
+	byte %.11.11..
+	byte %.11.1111
+	byte %.11.1111
+	
+	byte %...11..1
+	byte %1..11..1
+	byte %11.11..1
+	byte %11.11111
+	byte %11..1111
+	byte %11...11.
+	byte %11...11.
+	byte %1....11.
+	
+	byte %1..11...
+	byte %1..11...
+	byte %1..11...
+	byte %1..11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+	
+dot
+	byte %1.......
+wall
+	byte %11111111
+	byte %1.1.1.1.
+	byte %.1.1.1.1
+	byte %11111111
+
+;variables
+game_over_timer
+	pad 1
+;the time bonus recieved after level completion
+;gets divided by 8 after completion
+time_bonus
+	pad 1
+;the index to the level data of the current level =(level*32)-1
+level_index
+	pad 1
+;how many lives we have left
+lives
+	pad 1
+;the current score
+score
+	pad 1
+;position of spaceship
+spaceship_x
+	pad 1
+;position of bullet (x then y)
+player_bullet_pos
+	pad 2
+;position of leftmost enemy (x then y)
+enemy_pos
+	pad 1
+enemy_pos_y
+;whether the enemies exist or not
+enemies_exist
+	pad 5
+;the timer that tells how long until the next enemy movement
+enemy_move_timer
+	pad 1
+;the current action of the enemies
+enemy_phase
+	pad 1
+;the timer that tells how long the enemies moved down
+enemy_down_timer
+	pad 1
+;position of enemy bullet
+enemy_bullet_pos
+	pad 2
+;timer when the enemy shoots
+enemy_bullet_timer
+	pad 1
+;the target for bcd operations
+bcd_target
+	pad 3
+;the next dot to be changed randomly
+current_dot
+	pad 1
+level_data
+	pad 192
+	

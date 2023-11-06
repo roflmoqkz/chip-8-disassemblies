@@ -1,0 +1,1446 @@
+;controls
+left_key equ 7
+right_key equ 8
+up_key equ 3
+down_key equ 6
+place_key equ 1
+bring_temp_key equ 4
+flush_water_key equ 15
+reset_key equ 11
+;pipe_types
+blank equ 0
+vertical equ 1
+horizontal equ 2
+cross equ 3
+filled equ 4
+down_left equ 5
+down_right equ 6
+start_right equ 7
+start_left equ 8
+start_up equ 9
+start_down equ 10
+cell_tile equ 11
+water_stream equ 12
+up_right equ 13
+up_left equ 14
+cursor_tile equ 15
+;water direction
+water_up equ 0
+water_down equ 3
+water_left equ 5
+water_right equ 6
+;variables
+;the current score
+score var v7
+;the hundreds digit of the current score
+score_hundreds var v8
+;the type of a tile water is on
+water_tile var v9
+;temp tile waiting to be inserted
+;also the water progress
+temp_tile var va
+water_progress var va
+;the direction the water is flowing
+water_dir var vb
+;the position of the tile the water is on
+water_position var vc
+;coords of current tile
+current_tile var vd
+;the time between every water increment
+water_delay,ve
+;jump past the copyright
+	jp start
+	byte "v2.0 Raines (c) 1991"
+start
+;enable high resolution
+	high
+;load user reg
+	ld v3,r
+	ld water_delay,v2
+;check if user reg set
+	sne v3,1
+	jp user_reg_set
+	ld water_delay,78
+	ld v0,0
+	ld v1,0
+user_reg_set
+;reset total score
+	ld i,total_score
+	ld [i],v1
+	ld water_position,-1
+;reset user regs
+	ld v0,0
+	ld v1,0
+	ld v2,0
+	ld r,v2
+game_loop
+	cls
+;load altrenating 11 and 0 into grid
+	ld v0,cell_tile
+	ld v1,0
+	ld v2,0
+clear_8ac_loop
+;load into current grid cell
+	ld i,grid
+	add i,v2
+	ld [i],v1
+;next cell
+	add i,v2
+;loop until done
+	se v2,120
+	jp clear_8ac_loop
+;now clear 864
+	ld v0,0
+	ld v2,0
+clear_864_loop
+;load into current mem cell
+	ld i,864
+	add i,v2
+	ld [i],v1
+;next cell
+	add v2,2
+;loop until done
+	se v2,6
+	jp clear_864_loop
+	ld i,h_piper_logo
+;position of logo
+	ld v0,38
+	ld v1,57
+	ld v3,0
+draw_logo_loop
+;draw logo
+	add i,v3
+	drw v0,v1,5
+;increment by 5 because it is 5 tall
+	ld v3,5
+;next segment
+	add v0,8
+;loop until done
+	se v0,70
+	jp draw_h_piper_loop
+	ld i,score_text
+;position of score text
+	ld v0,104
+	ld v1,2
+;draw first segment
+	drw v0,v1,5
+;next segment
+	add v0,8
+;increment by 5 because it is 5 tall
+	ld v2,5
+	add i,v2
+;draw second segment
+	drw v0,v1,5
+	ld i,level_text
+;position of level text
+	ld v0,104
+	ld i,42
+;draw first segment
+	drw v0,v1,5
+;next segment
+	add v0,8
+;increment by 5 because it is 5 tall
+	ld v2,5
+	add i,v2
+;draw second segment
+	drw v0,v1,5
+;get num of minimum score required to progress 100-(water delay)/2
+	ld v1,water_delay
+	shr v1
+	ld v0,100
+	sub v0,v1
+	ld i,water_stream
+	bcd v0
+	ld v2,[i]
+;position of num
+	ld v3,90
+	ld v4,57
+;draw tens digit
+	ld f,v1
+	drw v3,v4,5
+;draw units digit
+	add v3,5
+	ld f,v2
+	drw v3,v4,5
+	ld v0,water_delay
+	ld i,prev_water_delay
+	ld [i],v0
+	ld i,horizontal_lines
+;start of thick line
+	ld v0,0
+	ld v1,0
+	draw_top_edge_loop
+;draw top edge
+	drw v0,v1,2
+;next segment
+	add v0,8
+;loop until done
+	se v0,96
+	jp draw_top_edge_loop
+;position of slot
+	ld v4,2
+draw_slots_loop
+	ld i,slot_left
+	ld v0,0
+;draw left part
+	drw v0,v4,12
+	ld i,slot_right
+	ld v0,8
+;draw right part
+	drw v0,v4,12
+;next slot
+	add v4,12
+;loop until done
+	se v4,62
+	jp draw_slots_loop
+;counts how many pipes we spawned
+	ld v7,0
+spawn_pipes_loop
+	ld v0,v7
+	call new_pipe
+;repeat unril we have 5 pipes
+	add v7,1
+	se v7,5
+	jp spawn_pipes_loop
+;position of bottom bar
+	ld v1,50
+	ld v0,16
+	ld i,thick_bar
+;draw bottom bar
+draw_bottom_bar_loop
+	drw v0,v1,6
+;next segment
+	add v0,8
+;loop until done
+	se v0,96
+	jp draw_bottom_bar_loop
+;position of right bar
+	ld v1,0
+	ld v0,96
+;draw right bar
+	ld i,vertical_bar
+draw_right_bar_loop
+	drw v0,v1,2
+;next segment
+	add v1,2
+;loop until done
+	se v1,56
+	jp draw_right_bar_loop
+	ld current_tile,#34
+	call draw_bottom_cursor
+	call draw_right_cursor
+	call draw_grid_cursor
+;position of top left cell
+	ld v1,2
+	ld i,cell
+draw_cells_loop
+	ld v0,16
+draw_cell_row_loop
+;draw cell
+	drw v0,v1,8
+;next cell
+	add v0,8
+;loop until done
+	se v0,96
+	jp draw_cell_row_loop
+;next cell row
+	add v1,8
+	se v1,50
+	jp draw_cells_loop
+;if we have a water position, set x to a fixed amount
+	sne water_position,-1
+	jp water_position_not_neg1
+	sne water_dir,water_up
+	ld v3,6
+	sne water_dir,water_down
+	ld v3,4
+	sne water_dir,water_right
+	ld v3,2
+	sne water_dir,water_left
+	ld v3,0
+	jp water_position_not_neg1
+water_position_neg1
+;get random x between 1 and 8
+	rnd v3,7
+	add v3,1
+;get random y between 1 and 4
+	rnd water_position,#30
+	add water_position,#10
+	add water_position,v3
+;get random start
+	rnd v3,3
+	shl v3
+	ld i,available_starts
+	add i,v3
+	ld v1,[i]
+	ld water_dir,v0
+;get a random start
+	ld v2,v1
+	ld water_tile,v2
+	ld v0,water_position
+	call place_tile
+	call set_water_tile
+;start with water progress 2
+	ld water_progress,2
+	call draw_temp_tile
+;reset score
+	ld score,0
+	ld score_hundreds,0
+	call draw_score
+	call draw_level
+;release the water after 255 frames initially
+	ld v0,255
+	ld dt,v0
+main_loop
+;check left key
+	ld v0,left_key
+	sknp v0
+	call move_left
+;check right key
+	ld v0,right_key
+	sknp v0
+	call move_right
+;check up key
+	ld v0,up_key
+	sknp v0
+	call move_up
+;check down key
+	ld v0,down_key
+	sknp v0
+	call move_down
+;check place key
+	ld v0,place_key
+	sknp v0
+	call place_tile
+;check bring temp key
+	ld v0,bring_temp_key
+	sknp v0
+	call bring_temp
+;check flush water key
+	ld v0,flush_water_key
+;make water go really quickly
+	ld water_delay,2
+	ld v0,dt
+	sne v0,0
+	call process_water
+	jp main_loop
+	
+place_tile ;38c
+;make sure any pipe can spawn
+	ld v0,15
+	call new_pipe
+	ld v0,current_tile
+;place new tile
+	call place_tile
+	ret
+	
+;puts the temp tile in the slots and not a random one 
+bring_temp
+	call shift_pipe
+	ld v0,current_tile
+	call place_tile
+	ret
+	
+;split the coords in current tile into x at v0 and y at v1
+split_coord ;39e
+;store low bytes into v0
+	ld v0,current_tile
+	ld v1,#0f
+	and v0,v1
+;store high bytes into v1
+	ld v1,current_tile
+	sub v1,v0
+	ret
+
+move_left
+;hide bottom and grid cursors
+	call draw_bottom_cursor
+	call draw_grid_cursor
+	call split_coord
+;move left
+	add v0,-1
+;constrain movement on the left
+	sne v0,-1
+	ld v0,0
+;get current tile
+	ld current_tile,v1
+	add current_tile,v0
+;redraw cursors
+	call draw_bottom_cursor
+	call draw_grid_cursor
+	ld v0,136
+	call short_wait
+	ret
+	
+move_right
+	call draw_bottom_cursor
+	call draw_grid_cursor
+	call split_coord
+;move right
+	add v0,1
+;constrain movement on the right
+	sne v0,10
+	ld v0,9
+;get current tile
+	ld current_tile,v1
+	add current_tile,v0
+;redraw cursors
+	call draw_bottom_cursor
+	call draw_grid_cursor
+	ld v0,136
+	call short_wait
+	ret
+	
+move_up
+	call draw_right_cursor
+	call draw_grid_cursor
+	call split_coord
+;move up
+	add v1,#f0
+;constrain movement on the top
+	sne v1,#f0
+	ld v1,0
+;get current tile
+	ld current_tile,v1
+	add current_tile,v0
+;redraw cursors
+	call draw_right_cursor
+	call draw_grid_cursor
+	ld v0,136
+	call short_wait
+	ret
+	
+move_down
+	call draw_right_cursor
+	call draw_grid_cursor
+	call split_coord
+;move up
+	add v1,#10
+;constrain movement on the top
+	sne v1,#60
+	ld v1,#50
+;get current tile
+	ld current_tile,v1
+	add current_tile,v0
+;redraw cursors
+	call draw_right_cursor
+	call draw_grid_cursor
+	ld v0,136
+	call short_wait
+	ret
+
+;draw the cursor below the current tile
+draw_bottom_cursor
+	call split_coord
+;move 6 down from starting x
+	add v0,#60
+	call get_tile_coords
+;draw bottom cursor
+	ld i,bottom cursor
+	drw v0,v1,4
+	ret
+;draw the cursor to the right of the current tile	
+draw_right_cursor
+	call split_coord
+	ld v0,v1
+;move 10 to the right
+	add v0,10
+	call get_tile_coords
+;draw right cursor
+	ld i,right_cursor
+	drw v0,v1,8
+	ret
+
+;draw the cursor on the grid
+draw_grid_cursor
+	ld v0,vd
+	call get_tile_coords
+	ld i,grid_cursor
+	drw v0,v1,8
+	ret
+
+;wait a little to not move to fast
+short_wait
+	add v0,-1
+	se v0,0
+	jp short_wait
+	ret
+
+draw_temp_tile ;draw the tile about to be placed
+	ld i,available_pipes
+	add i,temp_tile
+	ld v0,[i]
+	call get_pipe_graphic
+;position of next tile
+	ld v0,108
+	ld v1,28
+	drw v0,v1,8
+	ret
+
+process_water
+;hide temp tile
+	call draw_temp_tile
+;incement water progress
+	add water_progress,1
+	ld v0,water_tile
+	ld v1,#f0
+	and v0,v1
+;check if tile is straight or bendy
+	sne v0,0
+	jp straight_tile
+;if bendy tile check if we reached the middle
+	sne water_progress,4
+	jp bend_water
+;dont draw again after water bend
+	sne water_progress,5
+	jp after_water_processing
+straight_tile
+;store temp tile
+	ld v2,water_tile
+	se water_dir,water_up
+	jp water_not_up
+;reverse progress if up
+	ld v2,8
+	sub v2,water_progress
+water_not_up
+	ld v0,water_dir
+	shr v0
+	shr v0
+	se v0,0
+	jp water_horizontal
+;sub 1 from water progress if up
+	se water_dir,0
+	add v2,-1
+	ld v0,water_position
+	call get_tile_coords
+;offset coords by progress
+	add v1,v2
+	ld i,vertical_water_stream
+;draw stream
+	drw v0,v1,1
+;check collision
+	sne vf,0
+	jp no_collision
+;check if water ran out
+	se water_progress,1
+	jp no_collision
+;check if the new tile is a blank tile
+	ld water_tile,blank
+	jp game_over
+	
+bend_water
+;using clever choice of constants,switching directions is an xor operation
+	xor water_dir,water_tile
+	ld v0,7
+	and vb,v0
+	ld v0,water_position
+	call get_tile_coords
+;check if pipe is down right
+	se water_tile,#10+down_right
+	jp not_down_right
+	ld i,down_right_middle
+;offset down by 4
+	add v1,4
+not_down_right
+;check if pipe is up right
+	se water_tile,#10+up_right
+	jp not_up_right
+	ld i,up_right_middle
+;offset down by 2
+	add v1,2
+not_up_right
+;check if pipe is down left
+	se water_tile,#10+down_left
+	jp not_down_left
+	ld i,down_left_middle
+;offset down by 4
+	add v1,4
+not_down_right
+;check if pipe is up left
+	se water_tile,#10+up_left
+	jp not_up_left
+	ld i,up_left_middle
+;offset down by 2
+	add v1,2
+not_up_left
+;draw the middle segment
+	drw v0,v1,2
+	jp after_water_processing
+	
+water_horizontal
+	se water_dir,5
+	jp water_left
+;start with water on the left
+	ld v3,#80
+shift_right_loop
+;shift left by number of times adding up to 8
+	sne v2,8
+	jp shift_water_done
+	shr v3
+	add v2,1
+	jp 4c6
+shift_right_loop
+;start with 1
+	ld v3,#1
+shift_left_loop
+;shift left by number of times adding up to 8
+	sne v2,8
+	jp shift_water_done
+	shl v3
+	add v2,1
+	jp shift_left_loop
+shift_water_done
+	ld v1,v3
+	ld v0,v3
+;sore in water tile
+	ld i,water_stream
+	ld [i],v1
+	ld v0,water_position
+	call get_tile_coords
+;go three down
+	add v1,3
+;check if it is a cross tile
+	se water_tile,cross
+	jp not_cross_tile
+;and if water progress is 4 or 5, then don't draw
+	sne water_progress,4
+	jp dont_draw_water
+	sne water_progress,5
+not_cross_tile
+	drw v0,v1,2
+dont_draw_water
+;check collision
+	sne vf,0
+	jp no_collision
+;check if water ran out
+	se water_progress,1
+	jp no_collision
+;check if the new tile is a blank tile
+	ld water_tile,blank
+	jp game_over
+	
+no_collision
+	se water_progress
+	jp after_water_processing
+;erase score
+	call draw_score
+;increment counter
+	ld v0,0
+increment_score_loop
+;increment score
+	add score,1
+;increment hundreds if needed
+	se score,100
+	jp dont_increment_hundreds
+	add score_hundreds,1
+	ld score,0
+dont_increment_hundreds
+;loop until we increment 3 times
+	add v0,1
+	se v0,3
+	jp increment_score_loop
+;redraw score
+	call draw_score
+;reset water progress
+	ld water_progress
+	call 6e4
+after_water_processing
+;increment wait time by 160 if water is in start tile
+	ld v0,water_delay
+	ld v1,score_hundreds
+	add v1,score
+	sne v1,0
+	add v0,160
+	ld dt,v0
+	call draw_temp_tile
+	ret
+
+wait_for_reset
+;wait for key press
+	ld v0,wait_for_reset
+ wait_for_reset_key_loop
+	skp v0
+	jp wait_for_reset_key_loop
+;wait for key release
+wait_for_key_release_loop
+	sknp v0
+	jp wait_for_key_release_loop
+
+game_over
+;play short beep
+	ld v0,3
+	ld st,v0
+	call wait_for_reset
+;clear screen
+	cls
+;counts our position in the grid
+	ld v2,0
+;counts how many water tiles are there
+	ld v3,0
+count_water_loop
+;get tile
+	ld i,grid
+	add i,v2
+	ld v1,[i]
+;next tile
+	add v2,2
+;increment if we have a water
+	add v3,v1
+;loop until done
+	se v2,120
+	jp count_water_loop
+;add 100 points if there are at least 60 water tiles
+	sne v3,60
+	add score_hundreds
+	ld i,total_score
+	ld v1,[i]
+;add score
+	add v0,score
+;check if we have l 100 water tiles
+	ld v3,100
+	sub v0,v3
+	ld v4,vf
+;if so, add 1 to hundreds
+	se v4,0
+	add v1,1
+;otherwise add 100 to units
+	se v4,1
+	add v0,100
+	add v1,score_hundreds
+;write new total score
+	ld i,total_score
+	ld [i],v1
+;remember lower score
+	ld v5,v0
+;position of total score
+	ld v3,40
+	ld v4,40
+;get digits of hundreds
+	ld i,bcd_target
+	bcd v1
+	ld v2,[i]
+;draw hundreds digit
+	ld hf,v0
+	drw v3,v4,10
+	add v3,11
+;draw tens digit
+	ld hf,v1
+	drw v3,v4,10
+	add v3,11
+;draw units digit
+	ld hf,v2
+	drw v3,v4,10
+;get digits of lower score
+	ld i,bcd_target
+	bcd v5
+	ld v2,[i]
+;draw tens digit
+	ld hf,v1
+	drw v3,v4,10
+	add v3,11
+;draw units digit
+	ld hf,v2
+	drw v3,v4,10
+	call draw_score
+;get previous water delay
+	ld i,prev_water_delay
+	ld v0,[i]
+	ld water_delay,v0
+;increment speed by 4 if it is 2
+	sne water_delay,2
+	add water_delay,4
+;otherwise subtract 4
+	add water_delay,-4
+;check if we have at least 100 points
+	se score_hundreds
+	jp at_least_hundred_points
+;get min score
+	shr v0
+	ld v1,100
+	sub v1,v0
+;check if we passed min score
+	sub score,v1
+	sne vf,0
+	jp not_enough_to_pass
+at_least_hundred_points
+	call do_droplet
+;check if we exited by pressing 0 and not reset
+	se v0,0
+	jp game_loop
+;set the reg so we know to continue next time
+	ld v3,1
+	jp quit_game
+
+not_enough_to_pass
+	ld i,over_text
+;position of over text
+	ld v0,42
+	ld v1,24
+;draw first segment
+	drw v0,v1,5
+;next segment
+	add v0,8
+	ld v2,5
+	add i,v2
+;draw second segment
+	drw v0,v1,5
+	call do_droplet
+;ensure reg not set
+	ld v3,0
+quit_game
+;write regs
+	ld i,total_score
+	ld v1,[i]
+	ld v2,water_delay
+	ld r,v3
+;wait for reset and 0 keys to be released
+	ld v0,reset_key
+wait_for_reset_released
+	sknp v0
+	jp wait_for_reset_end_loop
+	ld v0,0
+wait_for_0_released
+	sknp v0
+	jp wait_for_0_released
+	exit
+
+do_droplet
+;load 2 lines
+	ld i,horizontal_lines
+;draw them
+	ld v3,2
+	ld v4,8
+	drw v3,v4,8
+;draw water tap end
+	ld i,water_tap_end
+	ld v3,10
+	drw v3,v4,8
+	ld i,droplet
+gen_droplet_loop
+;initial position of droplet
+	ld v3,14
+	ld v4,16
+;draw droplet
+	drw v3,v4,7
+droplet_loop
+	ld v0,37
+	call short_wait
+;check if reset key has been pressed
+	ld v0,reset_key
+	sknp v0
+	jp reset_key_pressed
+;check if zero key has been pressed
+	ld v0,0
+	sknp v0
+	jp reset_key_pressed
+;hide droplet 
+	drw v3,v4,7
+;move it down
+	add v4,2
+;check if it reached the bottom
+	sne v4,56
+	jp gen_droplet_loop
+;otherwise redraw droplet
+	drw v3,v4,7
+	jp droplet_loop
+	ret
+
+get_tile_coords
+;high bytes are y
+	ld v1,v0
+	ld vf,#f0
+	and v1,vf
+;divide by 2 (cause it is x16)
+	shr v1
+;low bytes are x
+	ld vf,#0f
+	and v0,vf
+;multiply by 8
+	shl v0
+	shl v0
+	shl v0
+;offset position
+	add v0,16
+	add v1,2
+	ret
+	
+;unused
+get_index_from_coords
+	add v0,-16
+	add v1,-2
+	shr v0
+	shr v0
+	shr v0
+	shl v1
+	add v0,v1
+	ret
+
+;get grid location based on coord
+get_grid_location ;652
+	ld i,grid
+;offset loc by x
+	ld v1,v0
+	ld vf,#0f
+	and v1,vf
+	shl v1
+	add i,v1
+;offset loc by y
+	ld vf,#f0
+	and v0,vf
+;multiply by 24
+	shr v0
+	ld v1,v0
+	shr v1
+	shr v1
+	add v0,v1
+	shl v0
+	add i,v0
+	ret
+
+;place tile in coord at v0 and type at v2
+place_tile
+	ld v3,v0
+	call get_grid_location
+;get grid tile
+	ld v1,[i]
+	ld v5,0
+;check if there is a cell tile there
+	se v0,cell_tile
+;if so, decrement score by one
+	ld v5,-1
+;check if it has water
+	sne v1,0
+	jp no_water
+;play a short beep
+	ld v1,3
+	ld st,v1
+	jp has_water
+no_water
+;erase current tile
+	call get_pipe_graphic
+	ld v0,v3
+	call get_tile_coords
+	drw v0,v1,8
+	ld v0,v3
+	call get_grid_location
+;write the new tile
+	ld v1,0
+	ld v0,v2
+	ld [i],v1
+;draw new tile
+	call get_pipe_graphic
+	ld v0,v3
+	call get_tile_coords
+	drw v0,v1,8
+has_water
+;hide score
+	call draw_score
+;decrement score if there is water there
+	add score,v5
+;check score underflow
+	se v7,-1
+	jp no_score_underflow
+;check negative score
+	sne v8,0
+	jp no_negative_score
+;decrement hundreds if not negative
+	add v8,-1
+	ld v7,99
+	jp no_score_underflow
+no_negative_score
+	ld v7,0
+no_score_underflow
+;draw score again
+	call draw_score
+	ret
+
+;gets the adress of the graphic acording to v0	
+get_pipe_graphic
+;get index from 0-15
+	ld v1,#0f
+	and v0,v1
+;multiply by 8 because they are 8 tall
+	shl v0
+	shl v0
+	shl v0
+;get pipe graphic
+	ld i,pipe_graphics
+	add i,v0
+	ret
+
+;mark not being able to place at water_position
+set_water_tile
+	ld v0,water_position
+	call get_grid_location
+;check if current tile is not a cell tile
+	ld v1,[i]
+	sne v0,cell_tile
+	jp game_over
+;set water tile
+	ld water_tile,v0
+	ld v0,water_position
+	call get_grid_location
+;set water there
+	ld v0,water_tile
+	ld v1,1
+	ld [i],v1
+	ret
+
+update_water_position
+;get offset based on direction
+	sne water_dir,water_right
+	ld v3,1
+	sne water_dir,water_down
+	ld v3,#10
+	sne water_dir,water_up
+	ld v3,#f0
+	sne water_dir,water_left
+	ld v3,-1
+;add for now
+	ld v1,water_position
+	add v1,v3
+;check top edge
+	ld vf,#f0
+	and v1,vf
+	sne v1,#f0
+	jp game_over
+;check bottom edge
+	sne v1,#60
+	jp game_over
+	ld v1,vc
+;reset number because we altered it
+	ld v1,water_position
+	add v1,v3
+;check left edge
+	ld vf,#f0
+	and v1,vf
+	sne #0f
+	jp game_over
+;check right edge
+	sne 10
+	jp game_over
+;update water position
+	add water_position,v3
+	call set_water_tile
+	ret
+	
+;shift the pipes without generating
+shift_pipe ;71c
+	ld v1,temp_tile
+	jp write_the_slots
+	
+;generates a new pipe and shifts the other ones
+new_pipe
+;get a random pipe
+	rnd v1,7
+	shr v0
+	shr v0
+	sne v0,0
+;only generate from the first 3 on the first slot
+	shr v1
+write_the_slots
+	ld i,available_pipes
+	add i,v1
+	ld v0,[i]
+	ld v5,v0
+	ld v4,3
+;start from the first slot
+	ld v3,0
+	shift_pipes_loop
+;get current pipe
+	ld i,pipe_slots
+	add i,v3
+	ld v0,[i]
+	ld v2,v0
+	call get_pipe_graphic
+;erase that pipe
+	ld v0,4
+	drw v0,v4,8
+	ld i,pipe_slots
+	add i,v3
+	ld v0,v5
+;place new pipe
+	ld [i],v0
+	call get_pipe_graphic
+;draw new pipe
+	ld v0,4
+	drw v0,v4,8
+	add v4,12
+;shift the current pipe onto the next slot
+	ld v5,v2
+;now process next slot
+	add v3,1
+;loop until done
+	se v3,5
+	jp shift_pipes_loop
+	ret
+
+draw_score
+;position of score number
+	ld v3,105
+	ld v4,9
+;get hundredsdigits
+	ld i,bcd_target
+	bcd score_hundreds
+	ld v2,[i]
+;draw hundreds digit
+	ld f,v2
+	drw v3,v4,6
+	add v3,6
+;get other digits
+	ld i,bcd_target
+	bcd score
+	ld v2,[i]
+;draw tens digit
+	ld f,v1
+	drw v3,v4,5
+	add v3,6
+;draw units digit
+	ld f,v2
+	drw v3,v4,5
+	ret
+
+;draw the current level
+draw_level
+;level is 20-((water_delay-2)/4)
+	ld v0,water_delay
+	add v0,-2
+	shr v0
+	shr v0
+	ld v1,20
+	sub v1,v0
+;gets digits of bcd
+	ld i,bcd_target
+	bcd v1
+	ld v2,[i]
+	ld hf,v1
+;position of level number
+	ld v3,104
+	ld v4,50
+;draw tens digit
+	drw v3,v4,10
+	add v3,11
+;draw units digit
+	ld hf,v2
+	drw v3,v4,10
+	ret
+;graphics
+vertical_bar
+	byte %11111...
+	byte %11111...
+
+slot_left
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11111111
+
+slot_right
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %11111111
+
+prev_water_delay
+	byte 78,0
+pipe_graphics
+;type 0-blank
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+;type 1-vertical
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+;type 2-horizontal shared with line
+horizontal_lines
+	byte %11111111
+	byte %11111111
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %11111111
+	byte %11111111
+;type 3-cross
+	byte %11....11
+	byte %11....11
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %11....11
+	byte %11....11
+;type 4-filled shared with bar
+thick_bar
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+;type 5-down left shared with water tap end
+water_tap_end
+	byte %11111111
+	byte %11111111
+	byte %....1111
+	byte %.....111
+	byte %......11
+	byte %......11
+	byte %1.....11
+	byte %11....11
+;type 6-down right
+	byte %11111111
+	byte %11111111
+	byte %1111....
+	byte %111.....
+	byte %11......
+	byte %11......
+	byte %11.....1
+	byte %11....11
+;type 7-start right
+	byte %11111111
+	byte %11111111
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %11111111
+	byte %11111111
+;type 8-start left
+	byte %11111111
+	byte %11111111
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %......11
+	byte %11111111
+	byte %11111111
+;type 9-start up
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11111111
+	byte %11111111
+;type 10-start down
+	byte %11111111
+	byte %11111111
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+	byte %11....11
+;type 11-cell
+cell
+	byte %........
+	byte %.111111.
+	byte %.1....1.
+	byte %.1....1.
+	byte %.1....1.
+	byte %.1....1.
+	byte %.111111.
+	byte %........
+;type 12-the tile that has water in it
+water_stream ;81e
+	pad 8
+;type 13-up right
+	byte %11....11
+	byte %11.....1
+	byte %11......
+	byte %11......
+	byte %111.....
+	byte %1111....
+	byte %11111111
+	byte %11111111
+;type 14-up left
+	byte %11....11
+	byte %1.....11
+	byte %......11
+	byte %......11
+	byte %.....111
+	byte %....1111
+	byte %11111111
+	byte %11111111
+;type 15-grid cursor
+grid_cursor
+	byte %........
+	byte %........
+	byte %...11...
+	byte %..1111..
+	byte %..1111..
+	byte %...11...
+	byte %........
+	byte %........
+	
+right_cursor
+	byte %........
+	byte %...1....
+	byte %...1....
+	byte %.111....
+	byte %.111....
+	byte %...1....
+	byte %...1....
+	byte %........
+bottom_cursor
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %.111111.
+vertical_water_stream
+	byte %...11...
+	pad 0
+	
+down_right_middle
+	byte %....1...
+	byte %.....1..
+up_right_middle
+	byte %.....1..
+	byte %....1...
+down_left_middle
+	byte %...1....
+	byte %..1.....
+up_left_middle
+	byte %..1.....
+	byte %...1....
+
+;the pipes that can be spawned
+;higher bytes mean wether the pipes are bendy or not
+available_pipes
+	byte #10+up_right,#10+down_left,#10+down_right,#10+up_left
+	byte #10+vertical,#10+horizontal,#10+cross,#10+cross
+;available start tiles
+available_starts
+	byte water_right,start_right
+	byte water_left,start_left
+	byte water_up,start_up
+	byte water_down,start_down
+	
+;the pipes located in the slots
+pipe_slots
+	pad 5
+	pad 1
+bcd_target
+	pad 4
+total_score
+	pad 2
+870
+	pad 2
+	
+h_piper_logo
+	byte %1.1...11
+	byte %1.1...1.
+	byte %111...11
+	byte %1.1...1.
+	byte %1.1.1.1.
+	
+	byte %1.111.11
+	byte %1..1..1.
+	byte %1..1..11
+	byte %...1..1.
+	byte %..111.1.
+	
+	byte %1.111.11
+	byte %1.1...1.
+	byte %1.11..11
+	byte %..1...1.
+	byte %..111.1.
+	
+	byte %1...1...
+	byte %1...1...
+	byte %1...1...
+	byte %.1......
+	byte %.1..1...
+
+score_text
+	byte %11.11..1
+	byte %1..1..1.
+	byte %11.1..1.
+	byte %.1.1..1.
+	byte %11.11..1
+	
+	byte %..111.11
+	byte %1.1.1.1.
+	byte %1.11..11
+	byte %1.1.1.1.
+	byte %..1.1.11
+
+level_text
+	byte %1..11.1.
+	byte %1..1..1.
+	byte %1..11.1.
+	byte %1..1...1
+	byte %11.11..1
+	
+	byte %1.11.1..
+	byte %1.1..1..
+	byte %1.11.1..
+	byte %..1..1..
+	byte %..11.11.
+	
+over_text
+	byte %111.1.1.
+	byte %1.1.1.1.
+	byte %1.1.111.
+	byte %1.1..1..
+	byte %111..1..
+	
+	byte %111.111.
+	byte %1...1.1.
+	byte %11..111.
+	byte %1...1..1
+	byte %111.1..1
+	
+droplet
+	byte %..1.....
+	byte %..1.....
+	byte %.111....
+	byte %11111...
+	byte %11111...
+	byte %11111...
+	byte %.111....
+
+;the grid 0-type of tile 1-does it have water
+grid ;8ac
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	byte cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0,cell_tile,0
+	

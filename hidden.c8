@@ -1,0 +1,755 @@
+;keys
+up_key equ 2
+left_key equ 4
+right_key equ 6
+down_key equ 8
+select_key equ 5
+;variables
+;the number of pairs left to match
+pairs_left var v6
+;physical position of card 1
+card1_x var v7
+card1_y var v8
+;the card chosen by the user
+selected_card var v9
+;the card first chosen by the user
+card1 var va
+;the key that was pressed
+key_pressed var vb
+;index of card cursor is on
+current_card var vc
+;physical cursor position
+cursor_x var vd
+cursor_y var ve
+;jump past the copyright
+	jp start
+	byte "HIDDEN! 1.0 By David Winter"
+start
+;init score and best score
+	ld i,score
+	ld v0,0
+	ld v1,40
+	ld [i],v1
+game_loop
+;clear score but not high score
+	ld i,score
+	ld v0,0
+	ld [i],v0
+	cls
+	ld i,main_logo
+;position of main logo
+	ld v0,12
+	ld v1,8
+;increment i by 15 because it is 15 tall 
+	ld v2,15
+draw_main_logo_loop
+;draaw main logo
+	drw v0,v1,15
+;next segmemt
+	add v0,8
+	add i,v2
+;loop until done
+	se v0,52
+	jp draw_main_logo_loop
+;wait for any key press
+	ld v0,k
+	cls
+	ld i,wait_text
+;position of wait text
+	ld v0,19
+	ld v1,13
+;increment i by 4 because it is 4 tall 
+	ld v2,4
+draw_wait_text_loop
+;draw wait text
+	drw v0,v1,4
+;next segment
+	add v0,8
+	add i,v2
+	se v0,43
+	jp draw_wait_text_loop
+	ld i,starting_cards
+	ld vf,[i]
+	ld i,cards
+;do 64 swaps
+	ld v3,64
+	ld pairs_left,8
+shuffle_cards_loop
+;generate position of 2 random cards
+	rnd v1,15
+	rnd v2,15
+;get first card
+	ld i,cards
+	add i,v1
+	ld v0,[i]
+;store in temp
+	ld v4,v0
+;get second card
+	ld i,cards
+	add i,v2
+	ld v0,[i]
+	ld v5,v0
+;put first card in second slot
+	ld v0,v4
+	ld [i],v0
+;put second card in first slot
+	ld i,cards
+	add i,v1
+	ld v0,v5
+	ld [i],v0
+;loop until all swaps are done
+	add v3,-1
+	se v3,0
+	jp shuffle_cards_loop
+	cls
+;position of top left card
+	ld v0,0
+	ld v1,0
+	ld i,card_back
+draw_cards_loop
+;draw card
+	drw v0,v1,7
+;next card
+	add v0,8
+	se v0,32
+	jp draw_cards_loop
+;next card row
+	ld v0,0
+	add v1,8
+	se v1,32
+	jp draw_cards_loop
+;initialize cursor position
+	ld current_card,0
+	ld cursor_x,0
+	ld cursor_y,0
+main_loop
+;increment score
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+	call draw_choose_card_1
+	ld card1,16
+	call select_card
+	call swap_choose_card_number
+;set card 1
+	ld card1,selected_card
+	ld card1_x,cursor_x
+	ld card1_y,cursor_y
+	call select_card
+;hide choose card text
+	call swap_choose_card_number
+	call draw_choose_card_1
+;get selected card
+	ld i,cards
+	add i,selected_card
+	ld v0,[i]
+	ld v1,v0
+;get first card
+	ld i,cards
+	add i,card1
+	ld v0,[i]
+;check if both cards are the same
+	se v0,v1
+	jp cards_dont_match
+	call draw_yop_text
+	ld v0,32
+	call wait
+;hide text
+	call draw_yop_text
+;0 means card has matched
+	ld v0,0
+;mark card 2
+	ld i,cards
+	add i,selected_card
+	ld [i],v0
+;mark card 1
+	ld i,cards
+	add i,card1
+	ld [i],v0
+;set 1 pair
+	add pairs_left,-1
+;check if all pairs are matched
+	se pairs_left,0
+	jp main_loop
+	ld i,score
+	ld v1,[i]
+	ld v2,v0
+;check if score is lower than best core
+	sub v0,v1
+	se vf,0
+	jp havent_beaten_score
+;if so, write new high score
+	ld v0,v2
+	ld v1,v2
+	ld [i],v1
+havent_beaten_score
+	cls
+	ld i,score_high_text
+;position of score high text
+	ld v0,16
+	ld v1,7
+;increment by 14 because top and bottom are shared
+	ld v2,14
+draw_score_high_text
+;draw score high text
+	drw v0,v1,15
+;next segment
+	add v0,8
+	add i,v2
+;loop until done
+	se v0,48
+	jp draw_score_high_text
+;get both scores
+	ld v1,[i]
+	ld v4,v1
+	ld v3,v0
+;draw current score
+	ld v6,9
+	call draw_score_number
+;draw high score
+	ld v6,15
+	call draw_score_number
+;wait for any key
+	ld v0,k
+	jp game_loop
+	
+cards_dont_match
+	call draw_oops_text
+	ld v0,128
+	call wait
+;hide text
+	call draw_oops_text
+;get card 1
+	ld i,cards
+	add i,card1
+	ld v0,[i]
+;get graphics index
+	add v0,-1
+	call multiply_by_6
+	ld i,card_graphics
+	add i,v0
+;flip card
+	drw card1_x,card1_y,7
+	ld i,card_back
+	drw card1_x,card1_y,7
+;get card 2
+	ld i,cards
+	ld i,select_card
+	ld v0,[i]
+;get graphics index
+	add v0,-1
+	call multiply_by_6
+	ld i,card_graphics
+	add i,v0
+;flip card
+	drw card1_x,card1_y,7
+	ld i,card_back
+	drw card1_x,card1_y,7
+	jp main_loop
+	
+;prompts the user to select a card and allows him to do so
+select_card
+;draw cursor
+	ld i,cursor
+	drw cursor_x,cursor_y,7
+;get input
+	ld key_pressed,k
+;hide cursor before moving
+	drw cursor_x,cursor_y,7
+;check left key
+	se key_pressed,left_key
+	jp not_left
+;check left edge
+	sne cursor_x,0
+	jp select_card
+;move cursor
+	add cursor_x,-8
+	add current_card,-1
+not_left
+;check right key
+	se key_pressed,right_key
+	jp not_right
+;check right edge
+	sne cursor_x,24
+	jp select_card
+;move cursor
+	add cursor_x,8
+	add current_card,1
+not_right
+;check up key
+	se key_pressed,up_key
+	jp not_up
+;check top edge
+	sne cursor_y,0
+	jp select_card
+;move cursor
+	add cursor_y,-8
+	add current_card,-4
+not_top
+;check down key
+	se key_pressed,down_key
+	jp not_up
+;check bottom edge
+	sne cursor_y,24
+	jp select_card
+;move cursor
+	add cursor_y,8
+	add current_card,4
+not_bottom
+;check select key
+	se key_pressed,select_key
+	jp select_card
+;get card
+	ld i,cards
+	add i,current_card
+	ld v0,[i]
+;check if the card already has been matched
+	sne v0,0
+	jp select_card
+	ld selected_card,current_card
+;check if we selected the same card as card 1
+	sne selected_card,card1
+	jp select_card
+;subtract 1 to get index of card graphic
+	add v0,-1
+;hide the card
+	ld i,card_back
+	drw cursor_x,cursor_y,7
+;get card graphic
+	ld i,card_graphics
+	call multiply_by_6
+	add i,v0
+;draw card
+	drw cursor_x,cursor_y,7
+	ret
+	
+draw_choose_card_1
+	ld i,choose_card_1
+;position of choose card 1 text
+	ld v0,36
+	ld v1,10
+;increment i by 11 because it is 11 tall 
+	ld v2,11
+draw_choose_card_1_loop
+;draw choose card 1 text
+	drw v0,v1,11
+;next segment
+	add v0,8
+	add i,v2
+;loop until done
+	se v0,60
+	jp draw_choose_card_1_loop
+	ret
+
+;could be done more effeciently using a single graphic
+swap_choose_card_number
+;position of both numbers
+	ld v0,52
+	ld v1,16
+;hide number 1
+	ld i,number_1
+	drw v0,v1,5
+;show number 2
+	ld i,number_2
+	drw v0,v1,5
+	ret
+
+;draws the oops text
+draw_oops_text
+	ld i,oops_text
+	jp ignore_yop_text
+;draws the yop text
+draw_yop_text
+	ld i,yop_text
+ignore_yop_text
+;position of yop text
+	ld v0,36
+	ld v1,13
+;increment i by 5 because it is 5 tall 
+	ld v2,5
+draw_yop_text_loop
+;draw yop text
+	drw v0,v1,5
+;next segment
+	add v0,8
+	add i,v2
+;loop until done
+	se v0,60
+	jp draw_yop_text_loop
+	ret
+
+;multiplies v0 by 6 used to get position of card graphic
+multiply_by_6
+	ld v1,v0
+;v1 = 2*v0
+	add v1,v1
+	add v0,v0
+	add v0,v0
+;v0 = 8*v0
+	add v0,v0
+;now v0 = 6*v0
+	sub v0,v1
+	ret
+
+;wait for v0 frames
+wait
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+	ret
+
+;draw number in v3 at y=v6
+draw_score_number
+;get digits of svore
+	ld i,cards
+	bcd v3
+	ld v2,[i]
+;x position of tens digit
+	ld v5,35
+;draw tens digits
+	ld f,v1
+	drw v5,v6,5
+;x position of units digit
+	ld v5,40
+;draw units digit
+	ld f,v2
+	drw v5,v6,5
+	ret
+
+;the initial arragement of the cards in 8 pairs
+starting_cards
+	byte 1,2,3,4,8,7,6,5,5,6,7,8,4,3,2,1
+;the place in memory to hold the cards
+cards
+	byte 1,2,3,4,8,7,6,5,5,6,7,8,4,3,2,1
+;0-the number of moves, 1-the best score
+score
+	pad 2
+	
+card_graphics
+;the last and first bytes are shared
+;card 1
+	byte %1111111.
+	byte %111.111.
+	byte %11...11.
+	byte %1.....1.
+	byte %11...11.
+	byte %111.111.
+;card 2	
+	byte %1111111.
+	byte %1111111.
+	byte %11...11.
+	byte %11...11.
+	byte %11...11.
+	byte %1111111.
+;card 3
+	byte %1111111.
+	byte %11...11.
+	byte %1.1.1.1.
+	byte %1.....1.
+	byte %1.1.1.1.
+	byte %11...11.
+;card 4	
+	byte %1111111.
+	byte %11...11.
+	byte %1.....1.
+	byte %1.....1.
+	byte %1.....1.
+	byte %11...11.
+;card 5
+	byte %1111111.
+	byte %1.111.1.
+	byte %11.1.11.
+	byte %111.111.
+	byte %11.1.11.
+	byte %1.111.1.
+;card 6
+	byte %1111111.
+	byte %111.111.
+	byte %111.111.
+	byte %1.....1.
+	byte %111.111.
+	byte %111.111.
+;card 7
+	byte %1111111.
+	byte %1.....1.
+	byte %1111111.
+	byte %1.....1.
+	byte %1111111.
+	byte %1.....1.
+;card 8
+	byte %1111111.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	
+cursor
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+;last byte is shared with card back
+card_back
+	byte %1111111.
+	byte %1.1.1.1.
+	byte %11.1.11.
+	byte %1.1.1.1.
+	byte %11.1.11.
+	byte %1.1.1.1.
+	byte %1111111.
+
+main_logo
+	byte %1...1.11
+	byte %1...1...
+	byte %11111...
+	byte %1...1...
+	byte %1...1.11
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %1111....
+	byte %.1..1...
+	byte %.1..1...
+	byte %.1..1...
+	byte %1111..1.
+
+	byte %111.1111
+	byte %1....1..
+	byte %1....1..
+	byte %1....1..
+	byte %111.1111
+	byte %........
+	byte %....1...
+	byte %....1...
+	byte %....1.1.
+	byte %........
+	byte %1...1.1.
+	byte %1...1.1.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %.1.1..1.
+	
+	byte %..1111..
+	byte %1..1..1.
+	byte %1..1..1.
+	byte %1..1..1.
+	byte %..1111..
+	byte %........
+	byte %111...1.
+	byte %1.1...11
+	byte %111...11
+	byte %........
+	byte %1...1.11
+	byte %11..1...
+	byte %1.1.1...
+	byte %1..11...
+	byte %1...1...
+	
+	byte %11111.1.
+	byte %1.....11
+	byte %111...1.
+	byte %1.....1.
+	byte %11111.1.
+	byte %........
+	byte %..1.1...
+	byte %1.111...
+	byte %1..1....
+	byte %........
+	byte %111.1111
+	byte %1...1...
+	byte %1...111.
+	byte %1...1...
+	byte %1...1111
+	
+	byte %..1....1
+	byte %..1....1
+	byte %1.1....1
+	byte %.11.....
+	byte %..1....1
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %1.1111..
+	byte %..1...1.
+	byte %..1111..
+	byte %..1.1...
+	byte %1.1..1..
+
+wait_text
+	byte %1...1..1
+	byte %1...1.1.
+	byte %1.1.1.11
+	byte %.1.1..1.
+	
+	byte %1..1.111
+	byte %.1.1...1
+	byte %11.1...1
+	byte %.1.1...1
+	
+	byte %11......
+	byte %........
+	byte %........
+	byte %...1.1.1
+
+choose_card_1
+	byte %.11.1.1.
+	byte %1...1.1.
+	byte %1...111.
+	byte %1...1.1.
+	byte %.11.1.1.
+	byte %........
+	byte %.11..1..
+	byte %1...1.1.
+	byte %1...111.
+	byte %1...1.1.
+	byte %.11.1.1.
+	
+	byte %.1...1..
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %1.1.1.1.
+	byte %.1...1..
+	byte %........
+	byte %11..11..
+	byte %1.1.1.1.
+	byte %11..1.1.
+	byte %1.1.1.1.
+	byte %1.1.11..
+	
+	byte %.11.111.
+	byte %1...1...
+	byte %.1..11..
+	byte %..1.1...
+	byte %11..111.
+	byte %........
+	byte %.....1..
+	byte %....11..
+	byte %.....1..
+	byte %.....1..
+	byte %....111.
+;4eb
+;graphics to swap choose card text
+number_1 ;4f1
+	byte %.....1..
+	byte %....11..
+	byte %.....1..
+	byte %.....1..
+	byte %....111.
+number_2
+	byte %....11..
+	byte %...1..1.
+	byte %.....1..
+	byte %....1...
+	byte %...1111.
+	
+oops_text
+	byte %.11...11
+	byte %1..1.1..
+	byte %1..1.1..
+	byte %1..1.1..
+	byte %.11...11
+	
+	byte %..111...
+	byte %1.1..1.1
+	byte %1.111...
+	byte %1.1.....
+	byte %..1....1
+	
+	byte %111....1
+	byte %.......1
+	byte %11.....1
+	byte %..1.....
+	byte %11.....1
+yop_text
+	byte %1...1..1
+	byte %1...1.1.
+	byte %.1.1..1.
+	byte %..1...1.
+	byte %..1....1
+	
+	byte %11..1111
+	byte %..1.1...
+	byte %..1.1111
+	byte %..1.1...
+	byte %11..1...
+	
+	byte %......1.
+	byte %1.....1.
+	byte %......1.
+	byte %........
+	byte %......1.
+
+score_high_text
+;top and bottom are shared
+	byte %11111111
+	byte %1.......
+	byte %1...1111
+	byte %1..1....
+	byte %1...111.
+	byte %1......1
+	byte %1..1111.
+	byte %1.......
+	byte %1..1...1
+	byte %1..1...1
+	byte %1..11111
+	byte %1..1...1
+	byte %1..1...1
+	byte %1.......
+
+	byte %11111111
+	byte %........
+	byte %..1111..
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	byte %..1111..
+	byte %........
+	byte %.11111..
+	byte %...1....
+	byte %...1....
+	byte %...1....
+	byte %.11111..
+	byte %........
+	
+	byte %11111111
+	byte %........
+	byte %........
+	byte %1.......
+	byte %........
+	byte %1.......
+	byte %........
+	byte %........
+	byte %........
+	byte %1.......
+	byte %........
+	byte %1.......
+	byte %........
+	byte %........
+	
+	byte %11111111
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %11111111
+	

@@ -1,0 +1,150 @@
+;keys
+left equ 4
+place equ 5
+right equ 6
+;vars
+;the current player (0-black 1-white)
+current_player var v9
+;slot where we are about to place
+current_slot var vb
+;the key that was placed
+key var vc
+;physical position of cursor
+cursor_x var vd
+cursor_y var ve
+
+	jp start
+byte "CONNECT4 by David WINTER"
+start
+;initialize the ball targets (unnecessary because they are already initialized)
+	ld i,initial_ball_targets
+	ld v6,[i]
+	ld i,ball_targets
+	ld [i],v6
+	ld v9,0
+	ld v8,1
+;init cursor position
+	ld current_slot,0
+	ld cursor_x,15
+	ld cursor_y,31
+	ld i,wall
+;set position of walls
+	ld v0,13
+	ld v1,50
+	ld v2,0
+draw_walls_loop
+;draw walls
+	drw v0,v2,15
+	drw v1,v2,15
+;draw another wall beneah
+	add v2,15
+	se v2,30
+	jp draw_walls_loop
+;draw last vertical wall segment
+	drw v0,v2,1
+	drw v1,v2,1
+;draw floor segments
+	ld v0,10
+	ld i,cursor
+	drw v0,v2,1
+	drw v1,v2,1
+;draw cursor initially
+	ld i,cursor
+	drw cursor_x,cursor_y,1
+;get input
+main_loop
+	ld key,k
+;remove cursor
+	drw cursor_x,cursor_y,1
+;check if we are placing
+	sne key,place
+	jp place_ball
+;check if we are moving left
+	se key,left
+	jp not_left
+;move left
+	add current_slot,-1
+	add cursor_x,5
+;wrap around to the right
+	se cursor_x,10
+	jp after_move
+	ld current_slot,6
+	ld cursor_x,45
+;ignore right moving
+	jp after_move
+not_left
+;check if we are moving right
+	se key,right
+	jp after_move
+;move left
+	add current_slot,1
+	add cursor_x,5
+;wrap around to the right
+	se cursor_x,50
+	jp after_move
+	ld current_slot,0
+	ld cursor_x,15
+after_move
+;draw cursor
+	drw cursor_x,cursor_y,1
+;back to getting a key
+	jp main_loop
+	
+place_ball
+;load the target
+	ld i,ball_targets
+	add i,current_slot
+	ld v0,[i]
+;check if there is space left
+	sne v0,-4
+	jp not_right
+;remember the old target
+	ld va,v0
+;write the new target
+	add v0,-5
+	ld [i],v0
+;switch to the other player
+	xor v9,v8
+;load the apropriate ball
+	ld i,black_ball
+	se current_player,0
+	ld i,white_ball
+;draw the ball
+	drw cursor_x,va,4
+not_right ;298
+	drw cursor_x,cursor_y,1
+	jp main_loop
+	
+;sprites
+black_ball
+	byte %.11.....
+cursor ;shared with black ball
+	byte %1111....
+	byte %1111....
+white_ball ;shared with black ball
+	byte %.11.....
+	byte %1..1....
+	byte %1..1....
+	byte %.11.....
+wall
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;the position the balls will be placed
+ball_targets
+	byte 26,26,26,26,26,26,26
+initial_ball_targets ;(redundant)
+	byte 26,26,26,26,26,26,26
+	

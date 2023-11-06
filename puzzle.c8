@@ -1,0 +1,159 @@
+;location of the tiles in memory
+tiles equ #300
+;directions
+up equ 2
+left equ 6 ;(mistake, should be the other way around)
+right equ 4
+down equ 8
+;new positions
+new_x var v4
+new_y var v5
+new_tile var 6
+;physical cursor position
+cursor_x var va
+cursor_y var vb
+;cursor position in memory
+current_tile var vc
+;character drawing positions
+	ld cursor_x,16
+	ld cursor_y,1
+;block drawing positions
+	ld v1,10
+	ld v2,0
+	ld v0,0
+init_loop
+	ld i,block
+;draw block
+	drw v1,v2,7
+;load the character
+	ld f,v0
+;don't draw if it is 0
+	se v0,0
+	drw cursor_x,cursor_y,5
+;next position
+	add v1,8
+	add cursor_x,8
+;check if we reached the end of the row
+	se v1,30
+	jp not_next_row
+;go to the beginning of the next row
+	ld v1,10
+	add v2,8
+	ld cursor_x,18
+	add cursor_y,8
+not_next_row
+	ld i,equ
+;get the current tile adress
+	add i,v0
+;store v0 in memory
+	ld [i],v0
+;next tile
+	add v0,1
+;check if we placed all tiles
+	se v0,16
+;otherwise go back
+	jp init_loop
+;position cursor
+	ld cursor_x,18
+	ld cursor_y,1
+	ld vc,0
+;we will move 255 times
+	ld v2,255
+;generate a random move direction (2,4,6,8)
+scramble_loop
+	rnd v0,6
+	add v0,2
+call move_block
+;count one time
+	add v2,-1
+	se v2,0
+;jump to the beginning if we haven't finished
+	jp scramble_loop
+;no idea what ve is
+	ld ve,0
+	ld ve,0
+main_loop
+;get key
+	ld v0,k
+	call move_block
+	add ve,1
+	add ve,1
+	jp main_loop
+	
+move_block ;direction in v0
+;copy positions
+	ld new_x,cursor_x
+	ld new_y,cursor_y
+	ld new_tile,current_tile
+;check if up
+	se v0,up
+	jp not_up
+;check if we are not at the top
+	sne cursor_y,1
+	jp not_up
+;move up
+	add new_y,-8
+	add new_tile,-4
+not_up
+;check if down
+	se v0,down
+	jp not_down
+;check if we are not at the bottom
+	sne new_y,25
+	jp not_down
+;move down
+	add new_y,8
+	add new_tile,4
+not_down
+;check if left
+	se v0,left
+	jp not_left
+;check if we are not at the left
+	sne new_x,18
+	jp not_left
+;move left
+	add new_x,-8
+	add new_tile,-1
+not_left
+	se v0,right
+	jp not_right
+	sne new_x,42
+	jp not_right
+;move right
+	add new_x,8
+	add new_tile,1
+;get tile from memory
+	ld i,tiles
+	add i,new_tile
+	ld v0,[i]
+	ld v1,v0
+;write the blank tile in the new position
+	ld v0,0
+	ld i,tiles
+	add i,new_tile
+	ld [i],v0
+;write the other tile in the old position
+	ld i,tiles
+	add i,current_tile
+	ld v0,v1
+	ld [i],v0
+;draw the character in the new position
+	ld f,v1
+	drw new_x,new_y,5
+	drw cursor_x,cursor_y,5
+;update the vars
+	ld cursor_x,new_x
+	ld cursor_y,new_y
+	ld current_tile,new_tile
+	ret
+;2 bytes for no reason
+	byte #ee,#5e
+block	;2b0
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	byte %1111111.
+	

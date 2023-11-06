@@ -1,0 +1,470 @@
+;keys
+rotate equ 4
+left equ 5
+right equ 6
+drop equ 7
+;vars
+;position of piece
+piece_x var v0
+piece_y var v1
+drop_key var v2
+rotation var v3
+;the current piece
+piece var v4
+;the time between piece drops
+delay var v5
+;stores the keys for reference
+left_key var v7
+right_key var v8
+rotate_key var v9
+;the number of lines cleared
+score var va
+;memory locations
+;position to store regs v0-v2 while doing bcd
+temp_regs equ #700
+;the target for bcd operations
+bcd_target equ #804
+	ld i,2b4
+	call init_score
+	call init_vars
+draw_base_loop
+;draw dot at position of base
+	add v0,1
+	drw v0,v1,1
+;loop until done
+	se v0,37
+	jp draw_base_loop
+draw_walls_loop
+;draw both walls
+	add v1,-1
+	drw v0,v1,1
+	ld v0,26
+	drw v0,v1,1
+;loop until done
+	se v1,0
+	jp draw_walls_loop
+;generate piece which is number 0-96 divisible by 16
+game_loop
+	rnd piece,112
+	sne piece,112
+	jp game_loop
+;get random rotation
+	rnd rotation,3
+	ld piece_x,30
+	ld piece_y,3
+	call get_piece_graphic
+main_loop
+;ensure correct amount of time between drops
+	ld dt,delay
+;draw the piece
+	drw piece_x,piece_y,4
+;check collision
+	se vf,1
+	jp input_loop
+;move piece up to place before collision
+	drw piece_x,piece_y,4
+	add piece_y,-1
+	drw piece_x,piece_y,4
+	call handle_collision
+	jp game_loop
+input_loop
+;check left key
+	sknp left_key
+	call move_left
+;check right key
+	sknp right_key
+	call move_right
+;check rotate key
+	sknp rotate_key
+	call rotate_piece
+;check drop ley
+	skp drop_key
+	jp not_drop_key
+;erase timer
+	ld v6,0
+	ld dt,v6
+not_drop_key
+;wait until delay done
+	ld v6,dt
+	se v6,0
+	jp input_loop
+;erase piece before moving it down
+	drw piece_x,piece_y,4
+;move piece down
+	add piece_y,1
+	jp main_loop
+	
+;sets i to draw the piece
+get_piece_graphic
+;get position according to piece
+	ld i,pieces
+	add i,piece
+;add rotation times 4 (could be done with shl)
+	ld v6,0
+	sne rotation,1
+	ld v6,4
+	sne rotation,2
+	ld v6,8
+	sne rotation,3
+	ld v6,12
+	add i,v6
+	ret
+
+;moves the piece left
+move_left
+;move left
+	drw piece_x,piece_y,4
+	add piece_x,-1
+	call draw_piece_with_delay
+;check collision
+	se vf,1
+	ret
+;if collided, move right
+	drw piece_x,piece_y,4
+	add piece_x,1
+	call draw_piece_with_delay
+	ret
+
+;moves the piece right
+move_right
+;move right
+	drw piece_x,piece_y,4
+	add piece_x,1
+	call draw_piece_with_delay
+;check collision
+	se vf,1
+	ret
+;if collided, move left
+	drw piece_x,piece_y,4
+	add piece_x,-1
+	call draw_piece_with_delay
+	ret
+	
+rotate_piece
+;rotate piece
+	drw piece_x,piece_y,4
+	add rotation,1
+;wrap around
+	sne rotation,4
+	ld rotation,0
+	call get_piece_graphic
+	call draw_piece_with_delay
+;check collision
+	se vf,1
+	ret
+;if collided, rotate the other way
+	drw piece_x,piece_y,4
+	add rotation,-1
+;wrap around
+	sne rotation,-1
+	ld rotation,3
+	call get_piece_graphic
+	call draw_piece_with_delay
+	ret
+
+dot
+	byte %1.......
+	pad 1
+;initializes various variables
+init_vars
+	ld left_key,left
+	ld right_key,right
+	ld rotate_key,rotate
+	ld v1,31
+	ld delay,16
+	ld drop_key,drop
+	ret
+	
+pieces
+;T
+	byte %.1......
+	byte %111.....
+	byte %........
+	byte %........
+	
+	byte %.1......
+	byte %11......
+	byte %.1......
+	byte %........
+	
+	byte %........
+	byte %111.....
+	byte %.1......
+	byte %........
+	
+	byte %.1......
+	byte %.11.....
+	byte %.1......
+	byte %........
+;L
+	byte %.1......
+	byte %.1......
+	byte %.11.....
+	byte %........
+	
+	byte %..1.....
+	byte %111.....
+	byte %........
+	byte %........
+	
+	byte %11......
+	byte %.1......
+	byte %.1......
+	byte %........
+	
+	byte %........
+	byte %111.....
+	byte %1.......
+	byte %........
+;J
+	byte %.1......
+	byte %.1......
+	byte %11......
+	byte %........
+	
+	byte %........
+	byte %111.....
+	byte %..1.....
+	byte %........
+	
+	byte %.11.....
+	byte %.1......
+	byte %.1......
+	byte %........
+	
+	byte %1.......
+	byte %111.....
+	byte %........
+	byte %........
+;Z
+	byte %.1......
+	byte %11......
+	byte %1.......
+	byte %........
+
+	byte %11......
+	byte %.11.....
+	byte %........
+	byte %........
+	
+	byte %.1......
+	byte %11......
+	byte %1.......
+	byte %........
+	
+	byte %11......
+	byte %.11.....
+	byte %........
+	byte %........
+;S
+	byte %1.......
+	byte %11......
+	byte %.1......
+	byte %........
+	
+	byte %........
+	byte %.11.....
+	byte %11......
+	byte %........
+	
+	byte %1.......
+	byte %11......
+	byte %.1......
+	byte %........
+	
+	byte %........
+	byte %.11.....
+	byte %11......
+	byte %........
+;O
+	byte %11......
+	byte %11......
+	byte %........
+	byte %........
+	
+	byte %11......
+	byte %11......
+	byte %........
+	byte %........
+	
+	byte %11......
+	byte %11......
+	byte %........
+	byte %........
+	
+	byte %11......
+	byte %11......
+	byte %........
+	byte %........
+;I
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	
+	byte %........
+	byte %1111....
+	byte %........
+	byte %........
+	
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	byte %.1......
+	
+	byte %........
+	byte %1111....
+	byte %........
+	byte %........
+
+;draw a piece and add a short delay
+draw_piece_with_delay
+	ld piece_x,piece_y,4
+;init delay
+	ld v6,53
+delay_wait_loop
+;wait for delay
+	add v6,-1
+	se v6,0
+	jp delay_wait_loop
+	ret
+	
+handle_collision
+;load dot graphic for checking
+	ld i,dot
+;set limit to 3 below piece or at bottom
+	ld vc,piece_y
+	se vc,30
+	add vc,1
+	se vc,30
+	add vc,1
+	se vc,30
+	add vc,1
+handle_collision_loop
+	call check_row
+;check if all blocks are at ro
+	sne vb,10
+	call score_row
+;loop until done
+	sne v1,vc
+	ret
+;if not done move to next row
+	add v1,1
+	jp handle_collision_loop
+
+;sets vb to the number of blocks at	row v1
+check_row
+;start at the left
+	ld v0,29
+;initialize block counter at 0
+	ld vb,0
+;draw dot
+	drw v0,v1,1
+;check if there is a block at the position
+	se vf,0
+	add vb,1
+;hide dot
+	drw v0,v1,1
+;next position
+	add v0,1
+;loop until done
+	se v0,37
+	ret
+	
+score_row
+;clear row
+	ld v0,29
+clear_row_loop
+	drw v0,v1,1
+;next block
+	add v0,1
+;loop until done
+	se v0,37
+	jp clear_row_loop
+;set ve to previous row and vd to current row
+	ld ve,v1
+	ld vd,ve
+	add ve,-1
+move_down_loop
+	ld v0,29
+;counter to check if there are any blocks in row
+	ld vb,0
+move_row_down_loop
+;check collision
+	drw v0,ve,1
+	se vf,0
+	jp collision_detected
+;hide block if no collision
+	drw v0,ve,1
+	se vg,0
+	jp no_collision
+collision_detected
+;if collision detected then move block to the bottom
+	drw v0,vd,1
+	add vb,1
+no_collision
+;next block
+	add v0,1
+;loop until done
+	se v0,37
+	jp move_row_down_loop
+;if we detected a block, go to next row
+	sne vb,0
+	jp last_row
+	add vd,-1
+	add ve,-1
+	se vd,1
+	jp move_down_loop
+	call draw_score
+;draw score again if no collision??
+	se vf,1
+	call draw_score
+;increment score and draw again
+	add score,1
+	call draw_score
+;increase speed if mod 8 equals 4
+	ld v0,score
+	ld vd,7
+	and v0,vd
+	sne v0,4
+	add delay,-2
+;cap delay at 4
+	sne delay,2
+	ld delay,4
+	ret
+	
+draw_score
+;hide regs
+	ld i,temp_regs
+	ld [i],v2
+;get digits of score
+	ld i,bcd_target
+	bcd va
+	ld v2,[i]
+;draw hundreds digit
+	ld f,v0
+	ld vd,50
+	ld ve,0
+	drw vd,ve,5
+;draw tens digit
+	add v0,5
+	ld f,v1
+	drw vd,ve,5
+;draw units digit
+	add v0,5
+	ld f,v2
+	drw vd,ve,5
+;restore regs
+	ld i,temp_regs
+	ld v2,[i]
+	ld i,dot
+	ret
+
+;no idea why this is a separate function	
+init_score
+	ld score,0
+	ld v0,25
+	ret
+;no idea why these bytes are hera (checksum??)
+	byte #37,#23
+	

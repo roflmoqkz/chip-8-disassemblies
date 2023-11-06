@@ -1,0 +1,260 @@
+;keys
+player1_up equ 1
+player1_down equ 4
+player2_up equ 12
+player1_down equ 13
+;variables
+;ball vars
+ball_x var v6
+ball_y var v7
+ball_vx var v8
+ball_vy var v9
+;player positions
+player1_x var va
+player1_y var vb
+player2_x var vc
+player2_y var vd
+;score is player 1 score * 10 + player 2 score
+score var ve
+	call draw_background
+;init players (player1_x initialized in draw background)
+	ld player1_y,12
+	ld player2_x,63
+	ld player2_y,12
+	ld i,paddle
+;draw both paddles
+	drw player1_x,player1_y,6
+	drw player2_x,player2_y,6
+;clear score for both players
+	ld score,0
+	call draw_scores
+;init ball x axis
+	ld ball_x,3
+	ld ball_vx,2
+game_loop
+;wait 96 frames
+	ld v0,96
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+;random y pos between 8 and 31
+	rnd ball_y,23
+	add ball_y,8
+	ld ball_vy,-1
+;initially draw ball
+	ld i,ball
+	drw ball_x,ball_y,1
+main_loop
+;hide both paddles
+	drw player1_x,player1_y,6
+	drw player2_x,player2_y,6
+;move player 1 up if pressed
+	ld v0,player1_up
+	sknp v0
+	add player1_y,-2
+;move player 1 down if pressed
+	ld v0,player1_down
+	sknp v0
+	add player1_y,2
+;wrap around
+	ld v0,#1f
+	and player1_y,v0
+;draw player 1 in new position
+	drw player1_x,player1_y,6
+;move player 2 up if pressed
+	ld v0,player2_up
+	sknp v0
+	add player2_y,-2
+;move player 2 down if pressed
+	ld v0,player2_down
+	sknp v0
+	add player2_y,2
+;wrap around
+	ld v0,#1f
+	and player2_y,v0
+;draw player 2 in new position
+	drw player2_x,player2_y,6
+;hide ball
+	drw ball_x,ball_y,1
+;move ball
+	add ball_x,ball_vx
+	add ball_y,ball_vy
+;constrain ball (not needed since it bounces)
+	ld v0,#3f
+	and ball_x,v0
+	ld v1,#1f
+	and ball_x,v1
+;check if ball hit the left side (it will never step over)
+	sne ball_x,0
+	jp left_side_hit
+;check if ball hit the right side (it will never step over)
+	sne ball_x,63
+	jp right_side_hit
+resume_ball
+;go up if we hit the bottom
+	sne ball_y,31
+	ld ball_vy,-1
+;go up if we hit the top
+	sne ball_y,0
+	ld ball_vy,1
+;draw the ball in the new position
+	drw ball_x,ball_y,1
+	jp main_loop
+	
+left_side_hit
+;start moving right
+	ld ball_vx,2
+;player 2 will win a point if hit
+	ld v3,1
+;get ball position relative to the paddle (to calculate bounce)
+	ld v0,ball_y
+	sub v0,player1_y
+;ignore right side hit
+	jp check_collision
+right_side_hit
+;start moving left
+	ld ball_vx,-2
+;player 1 will win a point if hit
+	ld v3,10
+;get ball position relative to the paddle (to calculate bounce)
+	ld v0,ball_y
+	sub v0,player2_y
+check_collision
+;check if the ball hit the paddle
+	se vf,1
+	jp ball_miss
+;check if the ball hit the top 2 pixels of the paddle
+	ld v1,2
+	sub v0,v1
+	se vf,1
+	jp ball_hit_top
+;check if the ball hit the middle 2 pixels of the paddle
+	sub v0,v1
+	se vf,1
+	jp ball_hit_middle
+;check if the ball hit the bottom 2 pixels of the paddle
+	sub v0,v1
+	se vf,1
+	jp ball_hit_bottom
+
+ball_miss
+;play a beep
+	ld v0,32
+	ld st,v0
+;increment the score of the appropriate player
+	call draw_scores
+	add score,v3
+	call draw_scores
+;position the ball in the new position when the game begins
+	ld ball_x,62
+	se v3,1
+;should be 1??
+	ld ball_x,3
+;change ball direction (not needed as it was done before)
+	ld ball_vx,-2
+	se v3,1
+	ld ball_vx,2
+	jp game_loop
+	
+ball_hit_top
+;increase speed up (cap at -1)
+	add ball_vy,-1
+	sne ball_vy,-2
+	ld ball_vy,-1
+;ignore bottom hit
+	jp ball_hit_middle
+ball_hit_bottom
+;increase speed down (cap at 1)
+	add ball_vy,1
+	sne ball_vy,2
+	ld ball_vy,1
+ball_hit_middle
+;play small beep
+	ld v0,4
+	ld st,v0
+;add or sub 1 to align the ball
+	add ball_x,1
+	sne ball_x,64
+	add ball_x,-2
+	jp resume_ball
+	
+;draw both scores
+draw_scores ;2d4
+	ld i,2f2
+	bcd score
+;get scores
+	ld v2,[i]
+;draw player 1 score
+	ld f,v1
+	ld v4,20
+	ld v5,2
+	drw v4,v5,5
+;draw player 2 score
+	add v4,21
+	ld f,v2
+	drw v4,v5,5
+	ret
+
+;graphics
+paddle
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;could have been shared with paddle
+ball
+	byte %1.......
+;pad for no reaseon
+	pad 1
+;place to store bcd operation
+bcd_target
+	pad 4
+;last byte is redundant
+separator
+	byte %11......
+	byte %11......
+	byte %11......
+	byte %........
+wall
+	byte %11111111
+;pad for no reason
+	pad 1
+;draw the separator and the walls
+draw_background
+;initial position
+	ld vb,32
+	ld vc,0
+	ld i,separator
+;draw separator
+draw_separator_loop
+	drw vb,vc,4
+;next segment
+	add vc,4
+;loop until done
+	se vc,32
+	jp draw_separator_loop
+;initial wall positions
+	ld va,0
+	ld vb,0
+	ld vc,31
+	ld i,wall
+;draw both walls
+draw_walls_loop
+	drw va,vb,1
+	drw va,vc,1
+;next segment
+	add va,8
+;loop until done
+	se va,64
+	jp draw_walls_loop
+	ld i,separator
+;fix hole at the top and load player 1 x
+	ld va,0
+	ld vb 32
+	drw vb,va,1
+	ret
+	

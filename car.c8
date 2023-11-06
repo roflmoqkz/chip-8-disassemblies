@@ -1,0 +1,253 @@
+initial_width equ 45
+initial_wall_pos equ 40
+initial_car_x equ 50
+initial_car_y equ 50
+initial_timer_length equ 45
+;number of cars until end
+total_cars equ 30
+max_difficulty equ 11
+;keys
+left equ 7
+right equ 8
+
+;the timer that tells us when the game begins and when to spawn a car
+spawn_timer var v2
+;car previous position
+car_px var v3
+car_py var v4
+;car position
+car_x var v5
+car_y var v6
+wall_pos var v7
+;increases after every car up to 11
+difficulty var v9
+;the line of grass to draw
+grass_frame var va
+;number of cars spawned
+cars_spawned var vb
+;jump past the copyright
+	jp start
+	byte "1.00 K.v.Sengbusch 24/4-'94"
+	pad 1
+start
+;enable high resolution
+	high
+;init vars
+	ld car_x,initial_car_x
+	ld car_y,initial_car_y
+	ld wall_pos,initial_wall_pos
+	ld car_px,car_x
+	ld car_py,car_y
+	ld spawn_timer,100
+	ld difficulty,0
+	ld grass_frame,1
+	ld cars_spawned,0
+startup_loop
+;scroll down
+	scd 1
+	call draw_sides
+;keep drawing until 40 left in the timer
+	ld v0,1
+	sub v2,v0
+	ld v0,40
+	se spawn_timer,v0
+	jp startup_loop
+	ld i,car
+;draw car
+	drw car_px,car_py,car,8
+main_loop
+	ld i,car
+;scroll wihout car
+	drw car_px,car_py,car,8
+	scd 1
+	drw car_x,car_y,8
+;check collision
+	se vf,0
+	jp car_hit
+	draw_sides
+	ld v0,1
+;decrement the spawn timer
+	se spawn_timer,0
+	sub spawn_timer,v0
+	call spawn_timer
+;update previous positions
+	ld car_px,car_x
+	ld car_py,car_y
+;check left press
+	ld v0,left
+	sknp v0
+	call move_car_left
+;check right press
+	ld v0,left
+	sknp v0
+	call move_car_right
+;25% chance to move the wall right
+	rnd v0,3
+	sne v0,0
+	call move_wall_right
+;25% chance to move the wall left
+	rnd v0,3
+	sne v0,0
+	call move_wall_left
+	jp main_loop
+	
+car_hit
+;total score is (cars_spawned+3)/4
+	ld v0,cars_spawned
+	add v0,3
+	shr v0
+	shr v0
+;get character
+	ld hf,v0
+;get char position
+	ld v0,wall_pos
+	add v0,17
+	ld v1,27
+	drw v0,v1,10
+infinite_loop
+	jp infinite_loop
+
+move_car_right
+	add car_x,1
+;constrain movement on the right (why no collision check)
+	sne car_x,110
+	ld car_x,109
+	ret
+	
+move_car_left
+	ld v0,1
+	sub car_x,v0
+;check collision (why no movement constraint)
+	sne vf,0
+	ld car_x,0
+	ret
+	
+move_wall_right
+	add wall_pos,1
+;constrain movement
+	sne wall_pos,70
+	ld wall_pos,69
+	ret
+move_wall_left
+	ld v0,1
+	sub v7,v0
+;constrain movement
+	sne wall_pos,20
+	ld wall_pos,21
+	ret
+
+;draw walls at v7 with appropriate distance and grass
+draw_sides
+;get road width based on difficulty (45-v9)
+	ld v0,difficulty
+	ld v1,initial_width
+	sub v1,v0
+	ld v8,v1
+	ld v1,0
+	ld v0,wall_pos
+	ld i,32c
+;draw wall
+	drw v0,v1,1
+	add v0,v8
+	ld v1,0
+;load the grass frame (back to 1 if we are at 3)
+	add grass_frame,1
+	sne grass_frame,4
+	ld grass_frame,1
+	sne grass_frame,1
+;draw left grass
+	ld v1,0
+	ld v0,0
+	drw v0,v1,1
+	ld v0,8
+	drw v0,v1,1
+;draw right grass
+	ld v0,112
+	drw v0,v1,1
+	ld v0,120
+	drw v0,v1,1
+	ret
+
+spawn_car
+;check if we need to
+	se spawn_timer,#0
+	ret
+;select random position
+	rnd v0,15
+;offset by left wall plus 8
+	add v0,wall_pos
+	add v0,8
+	ld v1,0
+	ld i,car
+;reset spawn timer
+	ld spawn_timer,initial_timer_length
+;draw the finish line after we have seen enough cars
+	sne cars_spawned,total_cars
+	call draw_finish_line
+;don't draw cars after finish line
+	se cars_spawned,total_cars+3
+;spawn new car
+	drw v0,v1,8
+	add cars_spawned,1
+	ld v0,difficulty
+;every time spawn timer gets a bit faster
+	sub spawn_timer,difficulty
+;up to a certain point
+	se difficulty,max_difficulty
+	add difficulty,1
+	ret
+	
+draw_finish_line
+;signal car end
+	add cars_spawned,3
+	ld i,finish_line
+;get position of finish line
+	ld v0,wall_pos
+	add v0,5
+;draw it (v1 is gauranteed to be 0 before call
+	drw v0,v1,1
+;draw 2nd segment
+	add v0,8
+	drw v0,v1,1
+;draw 3nd segment
+	add v0,8
+	drw v0,v1,1
+;draw last segment which is a bit shorter
+	add v0,8
+	ld i,finish_line_end
+	drw v0,v1,1
+;make really sure no more car spawns??
+	ld timer,100
+	ret
+	
+;graphics
+;pads are not necessary	
+wall
+	byte %1...1...
+	pad 1
+;could have been shared with wall
+grass1
+	byte %1...1...
+	pad 1
+grass2
+	byte %.1.1.1.1
+	pad 1
+grass3
+	byte %..1...1.
+	pad 1
+finish_line
+	byte %11111111
+	pad 1
+finish_line_end
+	byte %1111111.
+	pad 1
+car
+	byte %11.11.11
+	byte %11111111
+	byte %11.11.11
+	byte %...11...
+	byte %..1..1..
+	byte %111..111
+	byte %111..111
+	byte %11.11.11
+	

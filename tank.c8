@@ -1,0 +1,459 @@
+;number of bullets at the start
+starting_bullets equ 25
+;score per enemy killed
+score_per_enemy equ 10
+;keys
+	shoot_key equ 5
+	down_key_num equ 2 ;should be 8
+	left_key_num equ 4
+	right_key_num equ 6
+	up_key_num equ 8 ;should be 2
+;indicator that sprite is alive
+alive equ #0f
+;indicator that sprite is on edge
+on_edge equ #bb
+;directions
+up equ 1
+left equ 4
+right equ 6
+down equ 9
+;sprites
+tank_index equ 1
+bullet_index equ 2
+enemy_index equ 3
+;variables
+;position of sprite being processed
+sprite_dir var v1
+;the time between enemy moves
+move_timer var v2
+sprite_x var v3
+sprite_y var v4
+;whether the sprite exists or not
+sprite_life var v5
+;number of bullets remaining
+num_bullets var v6
+;contain the keys to move
+down_key var v7
+left_key var v8
+right_key var v9
+up_key var va
+sprite_on_edge var vb
+;the sprite that's being processed right now
+current_sprite var vc
+;our current csore
+score var ve
+	jp start
+tank_hit
+;sub 5 bullets
+	add num_bullets,-5
+;check if we still have them
+	ld v0,32
+	sub v0,num_bullets
+	sne vf,0
+	ld num_bullets,0
+	jp restart_game
+;properties of the tank
+tank_vars
+;no idea what these bytes are as they get overriden anyway
+;probably residue from debugging
+	byte 0,1,0,12,10
+217
+	byte 0,25
+;directions that the enemy can move (bug, should be 1,4,6,9)
+enemy_move_dirs
+	byte 2,4,6,8
+enemy_vars
+	byte 2,2,3,44,0,15
+bullet_vars
+	byte 0,2,5,46,8,0 ;v5 checks if bullet exists
+;the target for bcd operations
+bcd_target
+;probably residue from debugging
+	byte 0,2,5
+	pad 4
+;all ld vf,0 are irrelevant
+start 
+	ld score,0
+	ld vd,160
+;enemy directions (no idea why it is loaded)
+	ld up_key,up_key_num
+	ld right_key,right_key_num
+	ld left_key,left_key_num
+	ld down_key,down_key_num
+	ld num_bullets,starting_bullets
+	ld sprite_y,16
+	ld sprite_x,12
+	ld v2,0
+	ld sprite_dir,right
+;temporarily hide regs v0-va
+	ld i,tank_vars
+	ld [i],va
+game_loop
+	call draw_score_num_bullets
+;wait 64 frames
+	ld v0,64
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+	call draw_score_num_bullets
+	call disable_bullet
+	call disable_enemy
+;get tank vars to draw tank
+	ld i,tank_vars
+	ld v5,[i]
+	call draw_tank
+main_loop
+	call shoot
+	call move_bullet
+;check collision before every action to determine if we need to do it
+;if collision detected, jump to sprite hit
+	se vf,1
+	call process_enemy
+	se vf,1
+	call move_bullet
+	se vf,1
+	call move_bullet
+	se vf,1
+	call move_tank
+	sne vf,1
+	jp sprite_hit
+	jp main_loop
+	
+move_tank
+;load tank args
+	ld i,tank_vars
+	ld v5,[i]
+;check if we have bullets or are alive
+	sne num_bullets,0
+	se sprite_alive,0
+	jp can_move
+	jp tank_dead
+can_move
+;check keys
+	sknp down_key
+	ld v2,down
+	sknp left_key
+	ld v2,left
+	sknp right_key
+	ld v2,right
+	sknp up_key
+	ld v2,up
+;check if any key was pressed
+	sne v2,0
+	ret
+;hide tank before moving
+	call draw_tank
+	ld sprite_dir,v2
+	call move_sprite
+	call prevent_sprite_off_screen
+	ld current_sprite,tank_index
+	ld v2,0
+	ld vf,0
+	
+;draws tank according to rotation in v1 and x y in v3 and v4
+draw_tank
+	ld i,tank_up
+;check if tank points up
+	sne sprite_dir,up
+	ld v0,tank_up-tank_up
+;check if tank points left
+	sne sprite_dir,left
+	ld v0,tank_left-tank_up
+;check if tank points right
+	sne sprite_dir,right
+	ld v0,tank_right-tank_up
+;check if tank points down
+	sne sprite_dir,down
+	ld v0,tank_down-tank_up
+	add i,v0
+	drw sprite_x,sprite_y,7
+	ret
+	
+;check if shoot button is pressed and if so then shoot
+shoot
+;check if 5 pressed
+	ld v0,shoot_key
+	skp v0
+	ret
+;can't shoot if the bullet has been shot already
+	sne sprite_life,alive
+	ret
+;set bullet alive
+	ld sprite_life,alive
+	add num_bullets,-1
+;store regs in tank vars
+	ld i,tank_vars
+	ld [i],v5
+	add sprite_y,3
+	add sprite_x,3
+	call move_sprite
+	call move_sprite
+	call move_sprite
+;store bullet
+	ld i,bullet_vars
+	ld [i],v5
+	ld i,bullet
+;initially draw bullet
+	drw sprite_x,sprite_y,1
+	ret
+	
+move_bullet
+	ld i,bullet_vars
+	ld v5,[i]
+;check if bullet is alive
+	sne sprite_life,0
+	ret
+	ld i,bullet
+;hide bullet
+	drw sprite_x,sprite_y,1
+	call move_sprite
+	ld current_sprite,bullet_index
+;check if bullet is no edge
+	call disable_bullet
+	sne found_edge,on_edge
+	jp bullet_hit_edge
+	drw sprite_x,sprite_y,1
+
+;store variables of bullet
+load_bullet_vars
+	ld i,load_bullet_vars
+	ld [i],v5
+	ret
+;asserts there is no bullet
+disable_bullet
+	ld sprite_alive,0
+	ld v0,0
+	ld i,217
+	ld [i],v0
+	jp load_bullet_vars
+	
+process_enemy
+	ld i,enemy_vars
+	ld v5,[i]
+	se v5,alive
+	jp enemy_not_alive
+	ld i,enemy
+	drw sprite_x,sprite_y,5
+	se move_timer,0
+	jp
+;get random number from move dirs
+	rnd v1,3
+	ld i,219
+	add i,v1
+	ld v0,[i]
+	ld v1,v0
+;get a random move amount from 1 to 16
+	rnd move_timer,15
+	add move_timer,1
+	call move_sprite
+;draw enemy_move_dirs in new place
+	ld i,enemy
+	ld current_sprite,enemy_index
+;decrement move timer
+	add move_timer,-1
+	ld vf,0
+	drw sprite_x,sprite_y,5
+;store enemy variables
+	ld i,enemy_vars
+	ld [i],v
+;loads the enemy
+load_enemy
+	ld i,enemy_vars
+	ld [i],v5
+	ret
+	
+enemy_not_alive
+;load random location for enemy
+	rnd v4,7
+	ld i,enemy_spawn_x
+	add i,v4
+	ld v0,[i]
+	ld sprite_x,v0
+	ld i,enemy_spawn_y
+	ld v0,[i]
+	ld sprite_y,v0
+	drw sprite_x,sprite_y,5
+;play a long beep
+	ld v0,32
+	ld st,v0
+;spawn enemy
+	ld sprite_alive,alive
+	jp load_enemy
+
+;asserts there is no enemy
+disable_enemy
+	ld sprite_alive,0
+	jp load_enemy
+	
+sprite_hit
+;check if tank was hit
+	sne current_sprite,tank_index
+	jp tank_hit
+;check if bullet was hit
+	sne current_sprite,bullet_index
+	jp bullet_hit
+	ld i,bullet
+	ld v5,[i]
+;tank was hit if sprite isn't alive
+	sne sprite_alive,0
+	jp tank_hit
+	ld i,bullet
+;again check if it was really the bullet
+	drw sprite_x,sprite_y,1
+	ld vf,0
+	drw sprite_x,sprite_y,1
+	se vf,1
+	jp tank_hit
+
+bullet_hit
+	add score,score_per_enemy
+restart_game
+;play long beep
+	ld v0,64
+	ld st,v0
+	cls
+	jp game_loop
+	
+;go here if the game is over
+tank_dead
+	call draw_score_num_bullets
+;play really long beep
+	ld v0,96
+	ld st,v0
+;then go into an infinite loop
+infinite_loop
+	jp infinite_loop
+	
+;moves sprite according to direction in v1
+move_sprite
+	sne sprite_dir,up
+	add sprite_y,-1
+	sne sprite_dir,left
+	add sprite_x,-1
+	sne sprite_dir,right
+	add sprite_x,1
+	sne sprite_dir,down
+	add sprite_y,1
+	ret
+	
+prevent_sprite_off_screen
+;top edge
+	sne sprite_y,0
+	add sprite_y,1
+;left edge
+	sne sprite_x,0
+	add sprite_x,1
+;right edge
+	sne sprite_x,56
+	add sprite_x,-1
+;bottom edge
+	sne sprite_y,24
+	add sprite_y,-1
+	ret
+	
+;set vb to 187 if sprite on edge
+check_sprite_on_edge
+	ld sprite_on_edge,0
+;check top edge
+	sne sprite_y,0
+	jp found_edge
+;check left edge
+	sne sprite_x,0
+	jp found_edge
+;check right edge
+	sne sprite_x,63
+	jp found_edge
+;check bototm edge
+	sne sprite_y,31
+found_edge
+	ld vb,on_edge
+	ld vf,0
+	ret
+	
+draw_score_num_bullets
+	ld sprite_x,8
+	ld sprite_y,8
+	ld i,bcd_target
+;get digits of score
+	bcd score
+	ld v2,[i]
+	call draw_number
+	ld sprite_x,28
+	ld i,bcd_target
+;get digits of the numbef of bullets
+	bcd num_bullets
+	ld v2,[i]
+	call draw_number_tens
+	ret
+	
+;draws number stored in bcd in v0-v2 with x=v3 and y-v4
+draw_number
+;draw hundreds digit
+	ld f,v0
+	drw sprite_x,sprite_y,5
+	add sprite_x,6
+;draw number but ignore hundreds
+draw_number_tens
+;draw tens digit
+	ld f,v1
+	drw sprite_x,sprite_y,5
+	add sprite_x,6
+;draw units digit
+	ld f,v0
+	drw sprite_x,sprite_y,5
+	ret
+
+;graphics
+tank_up ;3ff
+	byte %...1....
+	byte %.1.1.1..
+	byte %.11111..
+	byte %.11.11..
+	byte %.11111..
+	byte %.11111..
+;shared with tank up
+tank_down
+	byte %.1...1..
+	byte %.11111..
+	byte %.11111..
+	byte %.11.11..
+	byte %.11111..
+	byte %.1.1.1..
+	byte %...1....
+tank_right
+	byte %........
+	byte %111111..
+	byte %.1111...
+	byte %.11.111.
+	byte %.1111...
+	byte %111111..
+;shared with tank right
+tank_left
+	byte %........
+	byte %..111111
+	byte %...1111.
+	byte %.111.11.
+	byte %...1111.
+	byte %..111111
+	byte %........
+
+bullet
+	byte %........
+	
+enemy
+	byte %1.1.1...
+	byte %.111....
+	byte %11111...
+	byte %.111....
+	byte %1.1.1...
+
+;positions where the enemy can spawn	
+enemy_spawn_x
+	byte 11,27,40,56,48,32,16,0
+enemy_spawn_y
+	byte 0,0,0,8,27,27,27,27
+	
+	byte 4
+	

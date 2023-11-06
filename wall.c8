@@ -1,0 +1,193 @@
+;ball speed
+xspeed equ 3
+yspeed equ 2
+;keys
+up equ 1
+down equ 4
+;position of paddle
+paddle_x var v3
+paddle_y var v4
+;velocity of ball
+ball_vx var v5
+ball_vy var d6
+;position of ball
+ball_x var v7
+ball_y var v8
+;the current score
+score var vb
+;previous position of ball
+ball_px var vc
+ball_py var vd
+;jump past the copyright
+	jp start
+byte "WALL by David WINTER "
+start
+;load horizontal wall
+	ld i,wall
+	ld v0,0
+;wall y positions
+	ld v1,0
+	ld v2,30
+;draw the walls
+draw_horiz_wall_loop
+	drw v0,v1,1
+	drw v0,v2,1
+;next wall segment
+	add v0,8
+	se v0,64
+;loop until complete
+	jp draw_horiz_wall_loop
+;load vertical wall
+	ld i,2df
+;initial position (the wall will wrap around
+	ld v0,62
+	ld v1,1
+;draw the wall
+draw_vert_wall_loop
+	drw v0,v1,5
+;next wall segment
+	add v0,5
+	se v0,30
+;loop until complete
+	jp draw_vert_wall_loop
+;last segment is a bit shorter
+	drw v0,v1,4
+;place paddle on the left
+	ld v3,0
+;random location from 8 to 23
+	rnd v4,15
+	add v4,8
+;make sure it is an odd position
+	ld v5,1
+	or v4,v5
+;init ball velocity
+	ld ball_vx,xspeed
+	ld ball_vy,yspeed
+;init ball position relative to paddle
+	ld ball_x,1
+	ld ball_y,v4
+	add ball_y,2
+;keys to compare to
+	ld v9,up
+	ld va,down
+	ld score,0
+;draw paddle
+	ld i,paddle
+	drw paddle_x,paddle_y,5
+	drw ball_x,ball_y,1
+;wait for any key
+	ld vc,k
+game_loop
+	call draw_score
+main_loop
+;wait for one frame
+	ld vc,1
+	ld dt,vc
+wait_loop
+	ld vc,dt
+	se vc,0
+	jp wait_loop
+	ld i,paddle
+;remember the location of the ball
+	ld ball_px,ball_x
+	ld ball_py,ball_y
+;check if up is pressed
+	skp v9
+	jp not_up
+;don't go up if we are at the top
+	sne paddle_x,1
+	jp not_up
+;move the paddle
+	drw paddle_x,paddle_y,5
+	add paddle_y,-2
+	drw paddle_x,paddle_y,5
+not_up
+;check if down is pressed
+	skp va
+	jp not_down
+;don't go down if we are at the bottom
+	sne paddle_y,25
+	jp not_down
+;move the paddle
+	drw paddle_x,paddle_y,5
+	add paddle_y,2
+	drw paddle_x,paddle_y,5
+	add ball_x,ball_vx
+	add ball_y,ball_vy
+;move to the right if we reached the left wall
+	sne ball_x,1
+	ld ball_vx,xspeed
+;move to the left if we reached the right wall
+	sne ball_x,61
+	ld ball_vx,-xspeed
+;move to the bottom if we reached the top wall
+	sne ball_y,1
+	ld ball_vx,yspeed
+;move to the top if we reached the bottom wall
+	sne ball_y,29
+	ld ball_vx,-yspeed
+;move the ball
+	drw ball_px,ball_py,1
+	drw ball_x,ball_y,1
+;don't check if we are at the paddle if we are not on the left side
+	se ball_x,1
+	jp main_loop
+;get ball position relative to paddle
+	ld vc,ball_y
+	sub vc,paddle_y
+;check for each position from 0 to 4 if we have hit
+	ld vd,0
+collision_check_loop
+	sne vc,vd
+;we have hit
+	jp ball_hit
+;check next position
+	add vd,1
+	se vd,5
+	jp collision_check_loop
+;wait for key
+	ld vc,k
+;if we didn't hit we clear the score
+	call draw_score
+	ld score,0
+	jp game_loop
+;increment the score
+	call draw_score
+	add score,1
+	jp game_loop
+	
+;draws the score
+draw_score ;2c4
+;store 
+	ld i,bcd_place
+	bcd score
+;score position
+	ld vc,52
+	ld vd,2
+	ld v2,[i]
+;draw tens digit
+	ld f,v1
+	drw vc,vd,5
+	add vc,5
+;draw units digit
+	ld f,v2
+	drw vc,vd,5
+	ret
+
+;graphics
+;shared with ball
+paddle
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+vert_wall
+	byte %111.....
+	byte %111.....
+	byte %111.....
+	byte %111.....
+	byte %111.....
+horiz_wall
+	byte %11111111
+bcd_place

@@ -1,0 +1,58 @@
+;this program generates a maze on the screen
+;this is done by putting a bunch of front and back slashes.
+;this creates a pattern like a maze
+
+;vars for the position where we currently draw
+x var v0
+y var v1
+;variable for wether we have to put a front or back slash
+type var v2
+;slash type ids
+fornt equ 0
+back equ 1
+
+	ld x,0
+	ld y,0
+draw_loop
+;initially load back slash
+	ld i,back_slash
+;generate a random type, the 01 mask makes it either 0 or 1
+	rnd type,#1
+;don't load the front slash if it is a back slash
+	se v2,back
+;otherwise load front slash
+	ld i,front_slash
+;draw whatever slash we loaded, 4 pixel tall
+	drw x,y,4
+;our next slash which we will draw will be 4 pixels to the right
+;so add 4 to the x position
+	add x,4
+;once x is 64, we have reached the end of the screen, so we have to go to
+;the next line.
+	se x,64
+;so if x is not 64 yet, draw another slash, so go back to the loop
+	jp draw_loop
+;set x to 0 to start drawing at the beginning of the line
+	ld x,0
+;add 4 to y to get to the next line, because each line is 4 pixels tall
+	add y,4
+;check if y is 32, if it is we have reached the end of the screen
+	se y,32
+;if we haven't reached the end of the screen, keep drawing slashes
+	jp draw_loop
+;once we are done drawing all slashes, to avoid executing any unnecessary code,
+;get into an infinite loop
+infinite_loop
+	jp infinite_loop
+
+front_slash
+	byte %1.......
+	byte %.1......
+	byte %..1.....
+	byte %...1....
+back_slash
+	byte %..1.....
+	byte %.1......
+	byte %1.......
+	byte %...1....
+	;the last row helps it align better

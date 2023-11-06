@@ -1,0 +1,1877 @@
+;controls
+move_left_key equ 3
+move_right_key equ 12
+start_key equ 10
+fly_key equ 10
+;facing constants
+duck_facing_right equ 0
+duck_facing_left equ 8
+bubble_facing_left equ 0
+bubble_facing_right equ 1
+bubble_on_ground equ 2
+;object existance constants
+no_objects equ 0
+one_duck equ 1
+both_ducks equ 2
+duck_and_bubble equ 3
+both_bubbles equ 4
+one_bubble equ 5
+;this value in v6 means life lost
+life_lost_flag equ #dd
+;object variables
+;position of object
+obj_x var v0
+obj_y var v1
+;velocity of object
+obj_vx var v2
+obj_vy var v3
+;where the object faces
+obj_facing var v4
+;no idea why twice
+obj_facing_2 var v5
+;game variables
+;position of player duck
+player_x var v6
+player_y var v7
+;is it a hard mode (no floor and shorter wait time)
+;if 2 then extra hard mode, so no wait time
+hard_mode var v8
+;the number of lives we have
+lives var v9
+;tells which objects exist (according to existance constants
+obj_exists var va
+;the number of ducks to be spawned
+reserve_ducks var vb
+;the current level
+level var vc
+
+;jump past the copyright
+	jp start
+copyright
+	byte "Joust v2.3",0
+	
+start
+;enable high resolution
+	high
+	call title_screen
+game_loop
+;reset score
+	ld v0,0
+	ld i,score
+	ld [i],v0
+;set hard mode, lives and level
+	ld hard_mode,0
+	ld lives,3
+	ld level,0
+level_loop
+;wait 15 frames
+	ld vd,15
+	call wait
+	cls
+;both ducks exist
+	ld obj_exists,both_ducks
+;increment level
+	add level,1
+	ld vd,7
+	sub vd,level
+	sne vf,0
+;if level above 8,load 8 reserve ducks no matter what and set extra hard mode
+	jp load_8_reserves
+;set hard mode on level 4
+	sne level,4
+	ld hard_mode,1
+;the number of ducks to be spawned is one more than the level
+	ld reserve_ducks,level
+	add reserve_ducks,1
+after_extra_hard
+;draw the crosses
+	call draw_crosses
+;y position
+	ld ve,27
+;if level above 9, draw 2 digit number
+	ld vd,9
+	sub vd,level
+	sne vf,0
+	jp draw_2_digit_number
+;draw level number
+	ld hf,level
+	ld vd,60
+	drw vd,ve,10
+;erase all the crosses
+	call erase_crosses
+	jp stage_loop
+
+load_8_reserves
+	ld reserve_ducks,8
+	ld hard_mode,2
+	jp after_extra_hard
+
+draw_2_digit_number
+	ld i,bcd_target
+	bcd level
+	ld v2,[i]
+;tens digit
+	ld vd,55
+	ld hf,v1
+	drw vd,ve,10
+;unites digit
+	ld vd,65
+	ld hf,v2
+	dtw vd,ve,10
+	call erase_crosses
+
+;the processing for a single stage starts here
+stage_loop
+;if the level is 7 mod 8
+	ld vd,7
+	and vd,level
+	sne vd,7
+	jp process_bonus_stage
+	call draw_platforms
+	call generate_player_duck
+	call spawn_enemy_duck
+;spawn additional duck if needed
+	se reserve_ducks,0
+	call spawn_second_enemy_duck
+;wait 15 frames
+	ld vd,15
+	call wait
+main_loop
+	call process_player_duck
+;check if we lost a life
+	sne player_x,life_lost_flag
+	jp process_life_lost
+;move on to the next level if there are no objects 
+	sne va,0
+	jp level_loop
+	call process_objects
+;if hard mode, process lava
+	se hard_mode,0
+	call process_lava
+;if not hard mode, wait 5 frames between cycles
+	ld vd,5
+	sne hard_mode,0
+	call wait
+;otherwise if not extra hard mode, wait only 3 frames
+	ld vd,3
+	sne hard_mode,1
+	call wait
+	jp main_loop
+
+;waits for amount of time in vd
+wait
+;wait for vd frames
+	ld dt,vd
+wait_loop
+	ld vd,dt
+;loop until done
+	se vd,0
+	jp wait_loop
+	ret
+
+;gets input and moves duck
+process_player_duck
+	ld i,player_duck_props
+	ld v4,[i]
+;set duck down by default
+	call set_duck_down
+;set no horiz movement by default
+	ld obj_vx,0
+;check if fly key is pressed
+	ld vd,start_key
+;if so, make it move up
+	sknp vd
+	call set_duck_up
+;check move left key
+	ld vd,move_left_key
+	sknp vd
+;if so, move left
+	call face_left
+;check move right key
+	ld vd,move_right_key
+	sknp vd
+;if so, move right
+	call face_right
+	call check_player_duck_collision
+;check if duck hit bottom
+	sne player_x,life_lost_flag
+	ret
+;check if duck collided with another duck
+	se vf,0
+	call process_collision
+	ret
+	
+;checks the collision of the duck and moves duck
+check_player_duck_collision
+	call check_platform_collision
+	call check_horizontal_collision
+
+;moves the player duck
+move_player_duck
+;store temp variables
+	ld vd,obj_x
+	ld ve,obj_y
+;move duck
+	add obj_x,obj_vx
+	add obj_y,obj_vy
+	ld i,player_duck
+	add i,obj_facing_2
+;wrap duck movement around
+	ld v5,#7f
+	and obj_x,v5
+	ld obj_facing_2,obj_facing
+	ld player_x,obj_x
+	ld player_y,obj_y
+;erase the previous duck
+	drw vd,ve,8
+;redraw duck
+	ld i,player_duck
+	add i,obj_facing
+	drw obj_x,obj_y,8
+;check if duck hit bottom pit
+	sne obj_y,56
+	ld player_x,life_lost_flag
+;write new duck props
+	ld i,player_duck_props
+	ld [i],v5
+	ret
+
+;processes all the objects except the player
+process_objects
+;process all objects that exist
+	sne obj_exists,one_duck
+	jp process_first_duck
+	sne obj_exists,both_ducks
+	jp process_both_ducks
+	sne obj_exists,duck_and_bubble
+	jp process_duck_and_bubble
+	sne obj_exists,both_bubbles
+	jp process_both_bubbles
+	sne obj_exists,one_bubble
+	jp process_first_bubble
+process_both_ducks
+;process the first duck first
+	call process_first_duck
+;process the second duck if needed
+	sne obj_exists,both_ducks
+	call process_second_duck
+	ret
+
+;processes the first duck
+process_first_duck
+	ld i,enemy_duck_props
+	ld v5,[i]
+;25% chance to get random duck movement
+	rnd vd,3
+	sne vd,0
+	call move_duck_random
+;no idea why this function is called
+	call move_duck_closer
+	call static_process_enemy_duck
+;check duck collision if collided
+	se vf,0
+	jp check_hit_first_duck
+	ret
+	
+;moves the duck towards the player if it is close enough
+move_duck_closer
+;get x distance between duck and player
+	ld vd,player_x
+	sub vd,obj_x
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if the distance is less than 16
+	ld ve,16
+	sub ve,vd
+	sne vf,0
+	ret
+;get y distance between duck and player
+	ld vd,player_y
+	sub vd,obj_y
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if the distance is less than 16
+	ld ve,16
+	sub ve,vd
+	sne vf,0
+	ret
+;check if the duck is to the right of the player
+	ld vd,player_x
+	sub vd,duck_x
+	sne vf,0
+;face duck in the correct direction
+	call face_left
+	se vf,0
+	call face_right
+;check if the duck is above or below the player
+	ld vd,player_y
+	sub vd,duck_y
+	se vf,0
+;move duck accordingly
+	call set_duck_down
+	sne vf,0
+	call set_duck_up
+;move the duck up if y positions matches
+	sne player_y,duck_y
+	call set_duck_up
+	ret
+
+process_second_duck
+	ld i,enemy_duck_2_props
+	ld v5,[i]
+;this duck has 50% chance to get random duck movement
+	rnd vd,1
+	sne vd,0
+	call move_duck_random
+;check duck collision if collided
+	se vf,0
+	jp check_hit_second_duck
+	ret
+
+;checks collision,moves and writes enemy duck
+static_process_enemy_duck
+	call check_enemy_duck_collision
+;write new duck variables
+	ld i,enemy_duck_props
+	ld [i],v5
+	ret
+
+;checks collision,moves and writes enemy duck 2
+static_process_enemy_duck_2
+	call check_enemy_duck_collision
+;write new duck variables
+	ld i,enemy_duck_2_props
+	ld [i],v5
+	ret
+	
+;checks the collision of the duck and moves duck
+check_enemy_duck_collision
+;check collision
+	call check_platform_collision
+	call check_horizontal_collision
+;move up if on the bottom floor
+	sne obj_y,52
+	call set_duck_up
+
+;moves the enemy duck
+move_enemy_duck
+	ld vd,obj_x
+	ld ve,obj_y
+;store temp variables
+	ld vd,obj_x
+	ld ve,obj_y
+;move duck
+	add obj_x,obj_vx
+	add obj_y,obj_vy
+	ld i,enemy_duck
+	add obj_facing_2
+;wrap duck movement around
+	ld v5,#7f
+	and obj_x,v5
+	ld obj_facing_2,obj_facing
+;erase the previous duck
+	drw vd,ve,8
+;redraw duck
+	ld i,enemy_duck
+	add obj_facing
+	drw obj_x,obj_y,8
+	ret
+
+process_duck_and_bubble
+;process the duck first
+	call process_first_duck
+	call process_first_bubble
+	ret
+process_both_bubbles
+	call process_second_bubble
+	call process_first_bubble
+	ret
+process_first_bubble
+	ld i,bubble_props
+	ld v4,[i]
+;check if the bubble has reached the bottom
+	sne obj_facing,bubble_on_ground
+	jp bubble_reached_bottom
+;by default move down
+	ld obj_vx,0
+	call check_bubble_collision
+	call move_bubble
+;write new bubble props
+	ld i,bubble_props
+	ld [i],v4
+	ret
+	
+bubble_reached_bottom
+;bubbles can stay on the ground for up to 8 cycles
+	add obj_vx,1
+	sne obj_vx,8
+	jp remove_bubble
+;if bubble isn't removed, write new props
+	ld i,bubble_props
+	ld [i],v4
+	ret
+
+remove_bubble
+;remove bubble
+	ld i,bubble
+	drw obj_x,obj_y,4
+;we we have both bubbles,copy second one to first
+	sne obj_exists,both_bubbles
+	jp copy_second_bubble
+;set object exists variable
+	sne obj_exists,duck_and_bubble
+	jp set_one_duck
+	ld obj_exists,no_objects
+	ret
+copy_second_bubble
+;copy bubble props
+	ld i,bubble_2_props
+	ld v4,[i]
+	ld i,bubble_props
+	ld [i],v4
+;if no reserve ducks,now there is one bubble
+	sne reserve_ducks,0
+	ld obj_exists,one_bubble
+	sne reserve_ducks,0
+	ret
+
+set_one_duck
+;if no reserve ducks,now there is one duck
+	sne reserve_ducks,0
+	ld obj_exists,one_duck
+	sne reserve_ducks,0
+	ret
+;otherwise spawn new duck
+	call spawn_enemy_duck
+	ld obj_exists,both_ducks
+	ret
+
+;unreachable code
+	call spawn_second_enemy_duck
+	ld obj_exists,2
+	ret
+
+;40e
+process_second_bubble
+	ld i,bubble_2_props
+	ld v4,[i]
+;check if the bubble has reached the bottom
+	sne obj_facing,bubble_on_ground
+	jp bubble_2_reached_bottom
+	call check_bubble_collision
+	call move_bubble
+;write new bubble props
+	ld i,bubble_props
+	ld [i],v4
+	ret
+bubble_2_reached_bottom
+;bubbles can stay on the ground for up to 8 cycles
+	add obj_vx,1
+	sne obj_vx,8
+	jp remove_bubble_2
+;if bubble isn't removed, write new props
+	ld i,bubble_2_props
+	ld [i],v4
+	ret
+	
+remove_bubble_2
+;remove bubble
+	ld i,bubble
+	drw obj_x,obj_y,4
+;if we have no reserve ducks, now there is one bubble
+	sne reserve_ducks,0
+	jp no_reserve_ducks
+;otherwise spawn the reserve duck
+	call spawn_enemy_duck
+	ld obj_exists,duck_and_bubble
+no_reserve_ducks
+	ld obj_exists,one_bubble
+	ret
+	
+;check collision of the bubble with platforms
+check_bubble_collision
+;check if bubble y matches the outer platforms
+	sne obj_y,24
+	jp reached_outer_platfroms
+;check if bubble y matches the top or bottom platform
+	sne obj_y,12
+	jp reached_top_bottom_platform
+	sne obj_y,36
+	jp reached_top_bottom_platform
+;if not at the special y values, move down
+	ld obj_vy,1
+	ret
+reached_outer_platfroms
+;check if the bubble collided with the outer platforms
+	call check_outer_platforms
+	se obj_vy,0
+	ret
+;play sound if it did
+	ld vd,1
+	ld st,vd
+;now bubble moves up
+	ld obj_vy,-3
+;change bubble direction according to facing
+	sne obj_facing,bubble_facing_left
+	ld obj_vx,-2
+	sne obj_facing,bubble_facing_right
+	ld obj_vx,2
+	ret
+reached_top_bottom_platform
+;check if the bubble collided with the top or bottom platform
+	call check_top_bottom_platform
+	se obj_vy,0
+	ret
+;play sound if it did
+	ld vd,1
+	ld st,vd
+;now bubble moves up
+	ld obj_vy,-3
+;change bubble direction according to facing
+	sne obj_facing,bubble_facing_left
+	ld obj_vx,-2
+	sne obj_facing,bubble_facing_right
+	ld obj_vx,bubble_on_ground
+	ret
+
+;moves the bubble
+move_bubble
+;remember old position
+	ld vd,obj_x
+	ld ve,obj_y
+;move bubble
+	add obj_x,obj_vx
+	add obj_y,obj_vy
+;move bubble graphic
+	ld i,bubble
+	drw vd,ve,4
+	drw obj_x,obj_y,4
+;check if bubble reached the bottom
+	sne obj_y,56
+	ld obj_facing,bubble_on_ground
+	ret
+
+;set duck orientation to left
+face_left
+	ld obj_facing,duck_facing_left
+	ld obj_vx,-4
+	ret
+
+;set duck orientation to right
+face_right
+	ld obj_facing,duck_facing_right
+	ld obj_vx,4
+	ret
+
+;make the duck move up
+set_duck_up
+	ld obj_vy,-2
+	ret
+
+;make the duck move down	
+set_duck_down
+	ld obj_vy,2
+	ret
+	
+;moves the duck in a random direction
+move_duck_random
+;random horizontal direction
+	rnd vd,1
+;play beep if facing right (no idea why only right, maybe bug)
+	ld st,vd
+;face horizontally based on random number
+	sne vd,0
+	call face_left
+	sne vd,1
+	call face_right
+;random vertical direction
+	rnd vd,1
+;set vertically based on random number
+	sne vd,0
+	call set_duck_down
+	sne vd,1
+	call set_duck_up
+	ret
+
+process_lava
+;25% chance of this happening per cycle
+	rnd vd,3
+	se vd,0
+	ret
+	ld i,current_lava
+	ld v1,[i]
+	ld vd,59
+;flip the lava
+	ld i,lava_flipper
+	drw v0,vd,5
+;next lava
+	add v0,v1
+;check if we reached the left side
+	sne v0,8
+	call set_lava_delta_right
+;check if we reached the right side
+	sne v0,112
+	call set_lava_delta_right
+;write current lava
+	ld i,current_lava
+	ld [i],v1
+	ret
+
+;sets the lava to move right
+set_lava_delta_right
+	ld v0,16
+	ld v1,8
+	ret
+;sets the lava to move left
+set_lava_delta_left
+	ld v0,104
+	ld v1,-8
+	ret
+
+;4e8
+;check duck collision and process it
+check_hit_first_duck
+	call check_box_collision
+	sne vf,0
+	jp first_duck_collided
+	ret
+check_hit_second_duck
+	call check_box_collision
+	sne vf,0
+	jp second_duck_collided
+	ret
+	
+;checks collision between duck and player both horizontally and vertically
+check_box_collision
+;load player x
+	ld vd,player_x
+;get distance in x between player and enemy
+	sub vd,obj_x
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if it is less than 8
+	ld ve,8
+	sub ve,vd
+	se vf,0
+	ret
+;load player y
+	ld vd,player_y
+;get distance in y between player and enemy
+	sub vd,obj_y
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if it is less than 8
+	ld ve,8
+	sub ve,vd
+	ret
+
+process_collision
+;check if we need to check both ducks
+	sne obj_exists,both_ducks
+	jp check_both_ducks
+;only check first duck
+	sne obj_exists,one_duck
+	jp second_duck_collided
+;check if we need to check both bubbles
+	sne obj_exists,both_bubbles
+	jp check_both_bubbles
+;only check second bubble
+	sne obj_exists,one_bubble
+	jp bubble_collision_detected
+;otherwise we check both duck and bubble
+	jp check_duck_and_bubble
+check_both_bubbles
+	ld i,bubble_props
+	ld v4,[i]
+	call get_horiz_distance
+	sne vf,0
+;we know it was the second bubble
+	jp bubble_2_collision_detected
+	jp bubble_collision_detected
+bubble_collision_detected
+	call increment_score
+;play sound
+	call short_beep
+	call short_beep
+;clear first bubble
+	ld i,bubble_props
+	ld v4,[i]
+	jp remove_bubble
+bubble_2_collision_detected
+	call increment_score
+;play sound
+	call short_beep
+	call short_beep
+;clear second bubble
+	ld i,bubble_2_props
+	ld v4,[i]
+	jp 42e
+check_duck_and_bubble
+;load enemy duck props
+	ld i,enemy_duck_props
+	ld v5,[i]
+	call get_horiz_distance
+;check if we collided horizontally
+	sne vf,0
+;if not, we know it was the bubble
+	jp bubble_collision_detected
+	
+check_both_ducks
+;load enemy duck props
+	ld i,enemy_duck_props
+	ld v5,[i]
+	call get_horiz_distance
+;check if we collided horizontally
+	sne vf,0
+	jp second_duck_collided
+	call get_vert_distance
+;check if we collided vertically
+	sne vf,0
+;if we haven't collided with the first duck, it must be the second duck
+	jp second_duck_collided
+	jp first_duck_collided
+	
+;get horizontal distance between player and enemy
+get_horiz_distance
+;load player position
+	ld vd,player_x
+;get distance in x between player and enemy
+	sub vd,obj_x
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if it is less than 8
+	ld ve,8
+	sub ve,vd
+	ret
+;get vertical distance between player and enemy
+get_vert_distance
+;load player position
+	ld vd,player_y
+;get distance in y between player and enemy
+	sub vd,obj_y
+;absolute value
+	sne vf,0
+	subn vd,vf
+;check if it is less than 8
+	ld ve,8
+	sub ve,vd
+	ret	
+	
+first_duck_collided
+	ld i,enemy_duck
+	ld v5,[i]
+;check if the y position of the 2 ducks matches exactly
+	sne player_y,obj_y
+	jp process_direct_hit
+;check if the player is below the duck
+	ld vd,player_y
+	sub vd,obj_y
+	se vf,0
+	jp finish_collision
+;otherwise we have an above hit
+	call medium_beep
+	ld i,enemy_duck
+	add i,obj_facing_2
+;remove duck
+	drw obj_x,obj_y,8
+;check if it was a duck and a bubble
+	sne obj_exists,duck_and_bubble
+	jp ducks_cleared
+	sne obj_exists,both_ducks
+	jp destroyed_first_duck
+;check if it was one duck
+	sne obj_exists,one_duck
+	ld obj_exists,5
+	call spawn_bubble
+	ret
+ducks_cleared
+	ld obj_exists,4
+	call spawn_bubble_2
+	ret
+destroyed_first_duck
+	call spawn_bubble
+;transfer duck data into first duck
+	ld i,enemy_duck_2_props
+	ld v5,[i]
+	ld i,enemy_duck_props
+	ld [i],v5
+;now we have a duck and a bubble
+	ld obj_exists,duck_and_bubble
+	ret
+	
+second_duck_collided
+	ld i,enemy_duck
+	ld v5,[i]
+;check if the y position of the 2 ducks matches exactly
+	sne player_y,obj_y
+	jp process_direct_hit
+;check if the player is below the duck
+	ld vd,player_y
+	sub vd,obj_y
+	se vf,0
+	jp finish_collision
+;otherwise we have an above hit
+	call medium_beep
+	ld i,enemy_duck
+	add i,obj_facing_2
+;remove duck
+	drw obj_x,obj_y,8
+;now only the first one exists
+	ld obj_exists,duck_and_bubble
+	call spawn_bubble
+	ret
+finish_collision
+	ld player_x,life_lost_flag
+	ret
+
+;spawns the second enemy duck and writes it into memory
+spawn_second_enemy_duck
+	call generate_duck
+	ld i,enemy_duck_2_props
+	ld [i],v5
+	ret
+	
+;spawns the enemy duck and writes it into memory
+spawn_enemy_duck
+	call generate_duck
+	ld i,enemy_duck_props
+	ld [i],v5
+	ret
+	
+;generates a duck with properties in regs
+generate_duck
+	call generate_position
+;we used up one of our reserve ducks
+	add reserve_ducks,-1
+	call set_duck_up
+;get random direction
+	rnd vd,1
+	se vd,1
+	call face_left
+	se vd,0
+	call face_right
+	ld i,a72
+	add i,obj_facing
+	drw obj_x,obj_y,8
+	ld obj_facing_2,obj_facing
+	ret
+	
+;spawns a duck in one of 4 random points
+generate_position
+;get random position 0-3
+	rnd vd,3
+;set position based on number generate
+	sne vd,0
+	jp zeroth_position
+	sne vd,1
+	jp first_position
+	sne vd,2
+	jp second_position
+;set third position
+	ld obj_x,120
+	ld obj_y,52
+	ret
+second_position
+;set second position
+	ld obj_x,64
+	ld obj_y,32
+	ret
+first_position
+;set first position
+	ld obj_x,64
+	ld obj_y,8
+	ret
+zeroth_position
+;set zeroth position
+	ld obj_x,8
+	ld obj_y,20
+	ret
+
+;spawns the first bubble
+spawn_bubble
+	call generate_bubble
+;write the first bubble
+	ld i,bubble_props
+	ld [i],v4
+	ret
+	
+;spawns the second bubble
+spawn_bubble_2
+	call generate_bubble
+;write the second bubble
+	ld i,bubble_2_props
+	ld [i],v4
+	ret
+	
+;generates bubble according to current duck in memory
+generate_bubble
+;add 8 to get base y of bubble
+	add obj_y,8
+	ld vd,55
+;constrain y to 55 or less
+	sub vd,obj_y
+	sne vf,0
+	ld obj_y,55
+;randomize the facing of the bublbe
+	rnd obj_facing,1
+;draw bubble
+	ld i,bubble
+	drw obj_x,obj_y,4
+	ret
+
+;this is what happens if the first hit on the same y position
+process_direct_hit
+	call direct_hit
+;check if the hit was from the right or left
+	se vf,0
+	jp hit_from_the_right
+	call face_right
+;move duck twice
+	call static_process_enemy_duck
+	call static_process_enemy_duck
+	jp bounce_player_left
+hit_from_the_right
+	call face_left
+;move duck twice
+	call static_process_enemy_duck
+	call static_process_enemy_duck
+	jp bounce_player_right
+;this is what happens if the second duck hit on the same y position
+process_direct_hit_2
+	;check if the hit was from the right or left
+	se vf,0
+	jp hit_2_from_the_right
+	call face_right
+;move duck twice
+	call static_process_enemy_duck_2
+	call static_process_enemy_duck_2
+	jp bounce_player_left
+hit_2_from_the_right
+	call face_left
+;move duck twice
+	call static_process_enemy_duck_2
+	call static_process_enemy_duck_2
+	jp bounce_player_right
+
+;process direct hit, play sound and calculate x difference
+direct_hit
+	ld vd,3
+	ld st,vd
+	ld vd,player_x
+	sub vd,obj_x
+	ret
+
+bounce_player_right
+;load player props
+	ld i,player_duck_props
+	ld v5,[i]
+;move away twice
+	call face_right
+	call check_player_duck_collision
+	call check_player_duck_collision
+	ret
+	
+bounce_player_left
+;load player props
+	ld i,player_duck_props
+	ld v5,[i]
+;move away twice
+	call face_right
+	call check_player_duck_collision
+	call check_player_duck_collision
+	ret
+
+process_life_lost
+;play melody
+	call medium_beep
+	call short_beep
+	call long_beep
+;wait 10 frames
+	ld vd,10
+	call wait
+;subtract a life
+	add lives,-1
+	sne lives,0
+	jp all_lives_lost
+;if either of the ducks exist, add 1 reserve duck
+	sne obj_exists,1
+	add reserve_ducks,1
+	sne obj_exists,3
+	add reserve_ducks,1
+;if both ducks exist, add 2 reserve ducks
+	sne obj_exists,2
+	add reserve_ducks,2
+;both ducks exist again
+	ld aduck_exists,2
+;jump to the next level if there are no reserve ducks
+	sne reserve_ducks,0
+	jp level_loop
+;set obj exists according to number of reserve ducks
+	ld obj_exists,both_ducls
+	sne reserve_ducks,1
+	ld obj_exists,one_duck
+;then start the level again
+	jp stage_loop
+	
+all_lives_lost
+	call play_game_over_melody
+;clear screen
+	cls
+	call draw_score
+	call spawn_static_ducks
+	jp game_loop
+
+;playes the game over melody
+play_game_over_melody
+;play really long beep
+	ld vd,12
+	ld st,vd
+;wait 24 frames
+	ld vd,24
+	call wait
+	call medium_beep
+	call medium_beep
+	call long_beep
+	call long_beep
+;wait 32 frames
+	ld vd,32
+	call wait
+	call long_beep
+	call long_beep
+;wait 32 frames
+	ld vd,32
+	call wait
+
+;beeps for 2 fames and waits 5
+short_beep
+;play 2 frame beep
+	ld vd,2
+	ld st,vd
+;wait 5 frames
+	ld vd,5
+	call wait
+	ret
+;beeps for 4 fames and waits 10
+medium_beep
+;play 4 frame beep
+	ld vd,4
+	ld st,vd
+;wait 10 frames
+	ld vd,10
+	call wait
+	ret
+;beeps for 8 fames and waits 20
+long_beep
+;play 8 frame beep
+	ld vd,8
+	ld st,vd
+;wait 20 frames
+	ld vd,20
+	call wait
+	ret
+	
+;increment score by 1
+increment_score
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+	ret
+	
+;draws the score
+draw_score
+;gets digits of score
+	ld i,score
+	ld v0,[i]
+	bcd v0
+	ld v2,[i]
+;position of score text
+	ld ve,27
+	ld vd,49
+;hundreds digit
+	ld hf,v0
+	drw vd,ve,10
+	add vd,10
+;tens digit
+	ld hf,v1
+	drw vd,ve,10
+	add vd,10
+;units digit
+	ld hf,v2
+	drw vd,ve,10
+	ret
+
+;draws 2 digagonals of crosses
+draw_crosses
+;top left corner of current frame
+	ld v3,0
+	ld v4,0
+;bottom right corner  of current frame
+	ld v5,124
+	ld v6,62
+;starts from the middle
+erase_crosses
+	ld i,cross
+draw_crosses_loop
+;draw crosses at all 4 corners
+	drw v3,v4,3
+	drw v3,v6,3
+	drw v5,v4,3
+	drw v5,v6,3
+;inset the crosses 4 horizontally and 2 vertically
+	add v3,4
+	add v4,2
+	add v5,-4
+	add v6,2
+;wait 4 frames
+	ld vd,4
+	call wait
+;loop until reaches middle or the other side (from the middle)
+	sne v3,64
+	ret
+	sne v3,128
+	ret
+	jp draw_crosses_loop
+
+;spawns player duck in static position
+generate_player_duck
+;this time onlt make it facing right
+	ld v4,duck_facing_right
+	ld v5,0
+;position of new duck
+	ld obj_x,112
+	ld obj_y,20
+	ld i,player_duck
+;draw new duck
+	drw obj_x,obj_y,8
+	ld i,player_duck_props
+	ld [i],v5
+	ret
+
+;checks the collision with all the platforms as well as top and bottom
+check_platform_collision
+;check top boundry
+	sne obj_y,0
+	jp top_boundry_collided
+;check ground collision
+	sne obj_y,52
+	jp ground_collided
+;check collision from below if duck is moving up
+	ld vd,2
+	se obj_vy,vd
+	jp check_collision_from_below
+;check if same y as middle platform
+	sne obj_y,20
+	jp check_outer_platforms
+;check if same y as top or bottom platform
+	sne obj_y,8
+	jp check_top_bottom_platform
+	sne obj_y,32
+	jp check_top_bottom_platform
+	ret
+check_collision_from_below
+;check if same y as below middle platform
+	sne obj_y,32
+	jp check_outer_platforms
+;check if same y as below top or bottom platform
+	sne obj_y,20
+	jp check_top_bottom_platform
+	sne obj_y,44
+	jp check_top_bottom_platform
+	ret
+check_outer_platforms
+;check if on left platform
+	ld vd,16
+	subn vd,obj_x
+	sne vf,0
+	jp collision_detected
+;check if on right platform
+	ld vd,104
+	sub vd,obj_x
+	sne vf,0
+	jp collision_detected
+	ret
+check_top_bottom_platform
+;check if right of left edge
+	ld vd,41
+	subn vd,obj_x
+	sne vf,0
+	ret
+;check if left of right edge
+	ld vd,80
+	subn vd,obj_x
+	sne vf,0
+	jp collision_detected
+	ret
+top_boundry_collided
+;set duck to go down if it goes up
+	ld vd,-2
+	sne v3,vd
+	call set_duck_down
+	ret
+ground_collided
+;if hard mode is 0, check entire floor, otherwise check only outer platforms
+	sne hard_mode,0
+	jp collision_detected
+	se hard_mode,0
+	jp check_outer_platforms
+collision_detected
+;make sure duck doesn't go further down/up
+	ld obj_vy,0
+	ret
+	
+;check if the duck hit the sides of platforms
+check_horizontal_collision
+;ignore if duck doesn't move horizontally
+	sne obj_vx,0
+	ret
+;check if duck is moving right
+	ld vd,4
+	se obj_vx,vd
+	jp duck_moving_left
+;check if the duck hit the middle platform edge
+	sne obj_x,104
+	jp duck_on_middle_platform_edge
+;check if the duck hit the top or bottom platform edge
+	sne obj_x,40
+	jp duck_on_top_bottom_platform_edge
+	ret
+duck_moving_left
+;check if the duck hit the middle platform edge
+	sne obj_x,16
+	jp duck_on_middle_platform_edge
+	sne obj_x,80
+	jp duck_on_top_bottom_platform_edge
+duck_on_middle_platform_edge
+;check below top part of platform
+	ld vd,17
+	subn vd,obj_y
+	se vf,0
+;check above bottom part of platform
+	ret
+	ld vd,33
+	subn vd,obj_y
+	sne vf,0
+	jp horiz_collision_detected
+	ret
+duck_on_top_bottom_platform_edge
+;check which half the duck is on to know which platform to check
+	ld vd,28
+	sub vd,obj_y
+	sne vf,0
+	jp duck_on_bottom_half
+;check below top part of platform
+	ld vd,5
+	subn vd,obj_y
+	se vf,0
+;check above bottom part of platform
+	ret
+	ld vd,21
+	subn vd,obj_y
+	sne vf,0
+	jp horiz_collision_detected
+	ret
+duck_on_bottom_half
+;check below top part of platform
+	ld vd,29
+	subn vd,obj_y
+	se vf,0
+;check above bottom part of platform
+	ret
+	ld vd,45
+	subn vd,obj_y
+	sne vf,0
+	jp horiz_collision_detected
+	ret
+horiz_collision_detected
+;stop the duck from moving further
+	ld v2,0
+	ret
+
+;draws all the platforms on the stage
+draw_platforms
+;cler scren
+	cls
+;position of first brick
+	ld vd,0
+	ld ve,60
+;draw brick
+	ld i,full_brick
+	drw vd,ve,4
+;draw another brick
+	ld vd,8
+	drw vd,ve,4
+	ld i,brick
+	ld vd,16
+;check if we need to draw entire floor or only outer
+	sne hard_mode,0
+	call draw_bricks
+	se hard_mode,0
+	call draw_lava
+	ld i,brick
+;rightmost brick
+	ld ve,28
+	ld vd,120
+	drw vd,ve,4
+;leftmost brick
+	ld vd,0
+	drw vd,ve,4
+;topleft brick
+	ld vd,56
+	ld vd,16
+	drw vd,ve,4
+;topright brick
+	ld vd,64
+	drw vd,ve,4
+;downright brick
+	ld ve,40
+	drw vd,ve,4
+;downleft brick
+	ld vd,56
+	drw vd,ve,4
+	ld i,right_platorm_edge
+;bottom right platform edge
+	ld vd,72
+	drw vd,ve,4
+;top right platform edge
+	ld ve,16
+	drw vd,ve,4
+;left right platform edge
+	ld vd,8
+	ld ve,28
+	drw vd,ve,4
+	ld i,left_platorm_edge
+;right left platform edge
+	ld vd,112
+	drw vd,ve,4
+;bottom left platform edge
+	ld ve,40
+	ld vd,48
+	drw vd,ve,4
+;top left platform edge
+	ld ve,16
+	drw vd,ve,4
+	call draw_lives
+	ret
+	
+;draws a row of cracked bricks until then end
+draw_bricks
+;draw full_brick
+	ld vd,ve,4
+;next full_brick
+	add vd,8
+;loop until done
+	se vd,128
+	jp draw_bricks
+	ret
+
+;draws a row of lava
+draw_lava
+;draw 2 bricks on the right
+	ld vd,112
+	drw vd,ve,4
+	ld vd,120
+	drw vd,ve,4
+;position of first lava
+	ld vd,16
+	ld i,lava
+	ld ve,59
+draw_lava_loop
+;draw lava
+	drw vd,ve,5
+;next lava
+	add vd,8
+;loop until done
+	se vd,112
+	jp draw_lava_loop
+;set next lava to be flipped
+	ld v0,104
+	ld v1,-8
+	ld i,current_lava
+	ld [i],v1
+	ret
+
+;draws the number of lives we have
+draw_lives
+;check if we have more than 1 life
+	sne v9,1
+	ret
+;position of first cross
+	ld vd,1
+	ld ve,61
+;draw cross
+	ld i,cross
+	drw vd,ve,3
+	add vd,4
+;check if we have more than 2 lives
+	se v9,2
+	drw vd,ve,3
+	add ve,4
+;check if we have more than 3 lives
+	ld v6,3
+	sub v6,9
+	sne vf,0
+	drw vd,ve,3
+	ret
+
+;processes the title screen
+title_screen
+	ld i,joust_logo
+;position of joust logo
+	ld vd,36
+	ld ve,24
+;draw joust logo first segment
+	drw vd,ve,0
+;increment by 32 because high res graphics are 32 bytes long
+	ld v0,32
+;second segment
+	add i,v0
+	add vd,16
+	drw vd,ve,0
+;third segment
+	add i,v0
+	add vd,16
+	drw vd,ve,0
+;fourth segment
+	add i,v0
+	add vd,16
+	drw vd,ve,0
+	
+;spawns ducks that go randomly on the screen
+spawn_static_ducks
+;set vars so no additional checks are done
+	ld hard_mode,0
+	ld reserve_ducks,1
+	ld obj_exists,0
+	call spawn_enemy_duck
+	call spawn_first_duck
+	call face_right
+;store duck props again??
+	ld i,player_duck_props
+	ld [i],v5
+title_loop
+;wait 10 frames
+	ld vd,10
+	call wait
+	ld i,player_duck_props
+	call v5,[i]
+	call 940
+	call move_player_duck
+;store duck props again??
+	ld i,player_duck_props
+	ld [i],v5
+;load second duck
+	ld i,enemy_duck_props
+	ld v5,[i]
+	call modify_movement
+	call move_enemy_duck
+;store duck props (the move duck function doesn't do it)
+	ld i,enemy_duck_props
+	ld [i],v5
+;wait for start key
+	ld vd,start_key
+	skp vd
+	jp title_loop
+	ret
+	
+;moves duck randomly and constraints movement vertically
+modify_movement
+;1 in 16 chance to move the duck randomly
+	rnd vd,15
+	sne vd,0
+	call move_duck_random
+;if reached top, go down
+	sne obj_y,2
+	ld obj_vy,2
+;if reached bottom, go up
+	sne obj_y,52
+	ld obj_vy,-2
+	ret
+	
+process_bonus_stage
+	call draw_platforms
+	call generate_player_duck
+	ld i,bubble
+;draw 3 bubbles on the top platform
+	ld ve,12
+	ld vd,50
+	drw vd,ve,4
+	add vd,12
+	drw vd,ve,4
+	add vd,12
+	drw vd,ve,4
+;draw 3 bubbles on the bottom platform
+	ld ve,36
+	ld vd,50
+	drw vd,ve,4
+	add vd,12
+	drw vd,ve,4
+	add vd,12
+	drw vd,ve,4
+	ld ve,24
+;left platforom
+	ld vd,10
+	drw vd,ve,4
+;left ground
+	ld ve,56
+	drw vd,ve,4
+;right ground
+	ld vd,114
+	drw vd,ve,4
+;counts how many bubbles we hit
+	ld v6,0
+;init timer
+	ld v7,0
+bonus_stage_loop
+;advance timer
+	add v7,1
+;after 106 cycles end the level
+	sne v7,106
+	jp level_loop
+;play tiny beep and wait 3 frames
+	ld vd,1
+	ld st,vd
+	ld vd,3
+	call wait
+	ld i,player_props
+;unclear why player movement is copied
+;set duck down by default
+	ld v5,[i]
+	call set_duck_down
+;set no horiz movement by default
+	ld obj_vx,0
+;check if fly key is pressed
+	ld vd,start_key
+;if so, make it move up
+	sknp vd
+	call set_duck_up
+;check move left key
+	ld vd,move_left_key
+	sknp vd
+;if so, move left
+	call face_left
+;check move right key
+	ld vd,move_right_key
+	sknp vd
+;if so, move right
+	call face_right
+	call check_platform_collision
+	call check_horizontal_collision
+;probably didn't use function to avoid changing v6 and v7
+;store temp variables
+	ld vd,obj_x
+	ld ve,obj_y
+;move duck
+	add obj_x,obj_vx
+	add obj_y,obj_vy
+	ld i,player_duck
+	add i,obj_facing_2
+;wrap duck movement around
+	ld v5,#7f
+	and obj_x,v5
+	ld obj_facing_2,obj_facing
+;erase the previous duck
+	drw vd,ve,8
+;redraw duck
+	ld i,player_duck
+	add i,obj_facing
+	drw obj_x,obj_y,8
+;check if duck hit bottom pit
+	sne obj_y,56
+	jp lava_hit
+;write new duck props
+	ld i,duck_props
+	ld [i],v5
+;if collision detected, find which bubble it was
+	se vf,0
+	call find_bubble_hit
+;check if we hit all bubbles
+	sne v6,9
+	jp all_bubbles_hit
+	jp bonus_stage_loop
+	
+;finds which bubble we hit in the bonus stage
+find_bubble_hit
+;do we need to check ground bubbles
+	ld ve,52
+	sne obj_y,ve
+	jp check_ground_bubbles
+;do we need to check side bubbles
+	ld ve,20
+	sne obj_y,ve
+	jp check_side_bubble
+;do we need to check top bubbles
+	ld ve,8
+	sne obj_y,ve
+	jp check_top_bottom_bubbles
+;do we need to check bottom bubbles
+	ld ve,32
+	sne obj_y,ve
+	jp check_top_bottom_bubbles
+	ret
+check_ground_bubbles
+;check right bubble
+	ld vd,112
+	sne v0,vd
+	jp collect_bubble
+;check left bubble
+	ld vd,8
+	sne v0,vd
+	jp collect_bubble
+	ret
+check_side_bubble
+;check left side bubble (could've been merged with ground bubbles)
+	ld vd,8
+	sne v0,vd
+	jp collect_bubble
+	ret
+check_top_bottom_bubbles
+;check left bubble
+	ld vd,48
+	sne v0,vd
+	jp collect_bubble
+;check middle bubble
+	add vd,12
+	sne v0,vd
+	jp collect_bubble
+;check right bubble
+	add vd,12
+	sne v0,vd
+	jp collect_bubble
+	ret
+collect_bubble
+;offset position to get position of bubble
+	add vd,2
+	add ve,4
+;remove bubble
+	ld i,bubble
+	drw vd,ve,4
+;play sound
+	call short_beep
+	call short_beep
+;collect bubble
+	add v6,1
+;increment score
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+	ret
+	
+lava_hit
+;play long beep
+	ld vd,8
+	ld st,vd
+	ld vd,20
+	call wait
+;decrement life
+	add lives,-1
+;check if game over
+	sne v9,0
+	jp all_lives_lost
+;otherwise move on to the next level
+	jp level_loop
+
+all_bubbles_hit
+;add 8 point bonus
+	ld i,score
+	ld v0,[i]
+	add v0,8
+	ld [i],v0
+;and an extra life
+	add lives,1
+;play melody
+	call long_beep
+	call medium_beep
+	call long_beep
+;then move on to the next level
+	jp level_loop
+
+;the current score (initialy in binary, later converted to bcd)
+score
+	pad 4
+
+cross
+	byte %.1......
+	byte %111.....
+	byte %.1......
+	pad 1
+
+player_duck
+	byte %.11..11.
+	byte %.11.1111
+	byte %.1..11..
+	byte %11111111
+	byte %.11.11..
+	byte %11.111..
+	byte %111.11..
+	byte %.1111...
+
+player_duck_left	
+	byte %.11..11.
+	byte %1111.11.
+	byte %..11..1.
+	byte %11111111
+	byte %..11.11.
+	byte %..111.11
+	byte %..11.111
+	byte %...1111.
+
+enemy_duck
+	byte %.11.111.
+	byte %.11.1111
+	byte %.1..11..
+	byte %11111111
+	byte %.11.11..
+	byte %1.11111.
+	byte %1..1111.
+	byte %.11111..
+	
+enemy_duck_left
+	byte %.111.11.
+	byte %1111.11.
+	byte %..11..1.
+	byte %11111111
+	byte %..11.11.
+	byte %.11111.1
+	byte %.1111..1
+	byte %..11111.
+
+;the properties of objects 0-x,1-y,2-vx,3-vy,4-facing,5-facing again??
+player_duck_props
+	pad 6
+enemy_duck_props
+	pad 6
+enemy_duck_2_props
+	pad 6
+bubble_props
+	pad 6
+bubble_2_props
+	pad 6
+
+right_platorm_edge
+	byte %11111111
+	byte %1.111.1.
+	byte %111.1...
+	byte %1.......
+	
+left_platform_edge
+	byte %11111111
+	byte %.11.11.1
+	byte %...11.11
+	byte %......1.
+
+brick
+	byte %11111111
+	byte %111.111.
+	byte %1.111.11
+	byte %1.11.11.
+
+full_brick
+	byte %11111111
+	byte %11111111
+	byte %11111111
+	byte %11111111
+;target for bcd operations
+bcd_target
+	pad 4
+lava
+	byte %.....11.
+	byte %...111..
+	byte %..1.1...
+	byte %.1..11..
+	byte %1111111.
+	pad 1
+;lava combined with the lava flipped
+lava_flipper
+	byte %.11..11.
+	byte %..1..1..
+	byte %..1111..
+	byte %.11.111.
+	byte %........
+	pad 1
+;the next lava to be flipped
+current_lava
+	pad 1
+;the distance to the lava after that
+lava_delta
+bubble
+	byte %.11.....
+	byte %1.11....
+	byte %1111....
+	byte %.11.....
+joust_logo
+;high res graphic
+	word %........11......
+	word %........11......
+	word %........11......
+	word %........11......
+	word %........11......
+	word %........11......
+	word %........11....11
+	word %........11...111
+	word %........11..11..
+	word %........11..11..
+	word %11......11..11..
+	word %11......11..11..
+	word %11......11..11..
+	word %11......11..11..
+	word %.11111111....111
+	word %..111111......11
+	
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %1111....11......
+	word %11111...11......
+	word %....11..11......
+	word %....11..11......
+	word %....11..11......
+	word %....11..11......
+	word %....11..11......
+	word %....11..11......
+	word %11111....1111111
+	word %1111......111111
+	
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %................
+	word %11....11111111..
+	word %11...111111111..
+	word %11..11..........
+	word %11..11..........
+	word %11...1111111....
+	word %11....1111111...
+	word %11..........11..
+	word %11..........11..
+	word %11..111111111...
+	word %11..11111111....
+	
+	word %................
+	word %................
+	word %..11............
+	word %..11............
+	word %..11............
+	word %..11............
+	word %111111..........
+	word %111111..........
+	word %..11............
+	word %..11............
+	word %..11............
+	word %..11............
+	word %..11..11........
+	word %..11..11........
+	word %...1111.........
+	word %....11..........
+		

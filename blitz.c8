@@ -1,0 +1,366 @@
+;number of towers in the first level
+initial_num_towers equ 4
+;keys
+drop_bomb equ 5
+;variables
+;number of towers in the current level
+num_towers var v7
+;position of bomb
+bomb_x var v8
+bomb_y var v9
+;have we dropped the bomb
+bomb_dropped var vb
+;the number of towers still stanging
+towers_remaining var vc
+;position of plane
+plane_x var vd
+plane_y var ve
+;jump past the copyright
+	jp start
+	byte "BLITZ By David WINTER"
+start
+	ld i,blitz_logo
+;position of logo
+	ld v0,4
+	ld v1,9
+;increment by 14 after every draw because it is 14 high
+	ld v2,14
+	ld v7,num_towers
+draw_logo_loop
+	drw v0,v1,14
+;next letter
+	add i,v2
+	add v0,12
+;loop until done
+	se v0,64
+	jp draw_logo_loop
+;wait for any key
+	ld v0,k
+;clear screen
+game_loop
+	cls
+	call draw_level_text
+;wait for any key
+	ld v0,k
+;clear screen
+	cls
+;counter for towers to draw
+	ld ve,num_towers
+	ld i,tower_segment
+draw_towers_loop
+	ld vb,31
+;get random even x for base of tower (could be done with rnd 62)
+	rnd vc,31
+	add vc,vc
+;draw tower base
+	drw vc,vb,2
+;check if there is already a tower there
+	se vf,1
+	jp no_tower_there
+;hide base
+	drw vc,vb,2
+;generate again
+	jp draw_towers_loop
+no_tower_there
+;get random height from 1 to 8
+	rnd va,7
+	add va,1
+draw_tower_loop
+;next segment position
+	add vb,-2
+;draw segment
+	drw vc,vb,2
+;loop until done
+	add va,-1
+	se va,0
+	jp draw_tower_loop
+;next tower
+	add ve,-1
+;loop until done
+	se ve,0
+	jp draw_towers_loop
+	ld vb,0
+	ld towers_remaining,num_towers
+;init position of plane
+	ld plane_x,0
+	ld plane_y,0
+main_loop
+	ld i,plane
+;draw plane
+	drw plane_x,plane_y,3
+;check collision
+	se vf,0
+	jp plane_hit
+	se bomb_dropped,0
+;can't drop a bomb if there is one on the xcreen
+	jp already_dropped
+;check for bomb drop key
+	ld v0,drop_bomb
+	skp v0
+	jp no_bomb_drop
+;spawn bomb
+	ld bomb_dropped,1
+	ld bomb_x,plane_x
+	add bomb_x,2
+	ld bomb_y,plane_y
+	add bomb_y,3
+already_dropped
+;draw bomb (or remove tower segment if in tower)
+	ld i,tower_segment
+	drw bomb_x,bomb_y,1
+	ld v1,vf
+no_bomb_drop
+;wait 5 frames until next movement
+	ld v0,5
+	ld dt,v0
+wait_loop
+	ld v0,dt
+	se v0,0
+	jp wait_loop
+;don't process bomb if there is no bomb
+	se bomb_dropped,1
+	jp no_bomb
+	ld i,tower_segment
+;hide bomb if no collision (or don't redraw tower segment)
+	se v1,1
+	drw bomb_x,bomb_y,1
+;make bomb fall
+	add bomb_y,1
+;check if reached bomb
+	se bomb_y,32
+	jp no_bomb
+;remove bomb
+	ld bomb_dropped,0
+;remove tower if we collided
+	se v1,0
+	add towers_remaining,-1
+;check if there are towers left
+	sne towers_remaining,0
+	jp all_towers_cleared
+no_bomb
+;hide plane
+	ld i,plane
+	drw plane_x,plane_y,3
+;move plane to the right
+	add plane_x,2
+;check if plane is off bounds
+	se plane_x,64
+	jp plane_in_bounds
+;bring him back and move him down
+	ld plane_x,0
+	add plane_y,1
+plane_in_bounds
+	jp main_loop
+
+all_towers_cleared
+	cls
+;add 2 to number of towers to begin next level
+	add num_towers,2
+	jp game_loop
+	
+plane_hit
+;hide plane
+	ld i,plane
+	drw plane_x,plane_y,3
+;position of game over text 
+	ld v0,20
+	ld v1,2
+;increment by 11 after every draw because it is 11 high
+	ld v2,11
+	ld i,game_over_text
+draw_game_over_loop
+;draw game over text
+	drw v0,v1,11
+;next segment
+	add i,v2
+	add v0,8
+	se v0,44
+	jp draw_game_over_loop
+;finally, get stuck in an infinite loop
+infinite_loop
+	jp infinite_loop
+	
+;draws both level label and number
+draw_level_text
+;position of level text
+	ld v0,10
+	ld v1,13
+;increment by 5 after every draw because it is 5 high
+	ld v2,5
+;draw level text
+	ld i,level_text
+draw_level_text_loop
+	drw v0,v1,5
+;next segment
+	add i,v2
+	add v0,8
+;loop until done
+	se v0,42
+	jp draw_level_text_loop
+;level is (num_towers-2)/2
+	ld v0,num_towers
+	add v0,2-initial_num_towers
+	shr v0
+;get level digits
+	ld i,bcd_target
+	bcd v0
+	ld v2,[i]
+;text position
+	ld v0,45
+;draw tens digits
+	ld f,v1
+	ld v1,13
+	drw v0,v1,5
+;draw units digit
+	add v0,5
+	ld f,v2
+	drw v0,v1,5
+	ret
+	
+;graphics
+level_text
+	byte %1.....11
+	byte %1.....1.
+	byte %1.....11
+	byte %1.....1.
+	byte %11111.11
+	
+	byte %111.1...
+	byte %....1...
+	byte %1...1...
+	byte %.....1.1
+	byte %111...1.
+	
+	byte %1.11111.
+	byte %1.1.....
+	byte %1.111...
+	byte %..1.....
+	byte %..11111.
+	
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %11111...
+plane
+	byte %1.......
+	byte %11111...
+	byte %111111..
+;shared with bomb
+tower_segment
+	byte %11......
+	byte %11......
+game_over_text
+	byte %11111..1
+	byte %1......1
+	byte %11.11.11
+	byte %11..1.11
+	byte %11111.11
+	byte %........
+	byte %11111.1.
+	byte %1...1.1.
+	byte %1..11.1.
+	byte %1..11..1
+	byte %11111...
+	
+	byte %111.1111
+	byte %..1.1.1.
+	byte %111.1...
+	byte %..1.1..1
+	byte %..1.1..1
+	byte %........
+	byte %.11.1111
+	byte %.11.1...
+	byte %..1.111.
+	byte %.1..11..
+	byte %1...1111
+	
+	byte %1.11111.
+	byte %1.1.....
+	byte %1.111...
+	byte %1.11....
+	byte %1.11111.
+	byte %........
+	byte %1.11111.
+	byte %..1...1.
+	byte %..11111.
+	byte %..11.1..
+	byte %1.11..1.
+blitz_logo
+;B
+	byte %11.11...
+	byte %11.11...
+	byte %........
+	byte %11....11
+	byte %11....11
+	byte %........
+	byte %11.11...
+	byte %11.11...
+	byte %........
+	byte %11....11
+	byte %11....11
+	byte %........
+	byte %11.11...
+	byte %11.11...
+;L
+	byte %11......
+	byte %11......
+	byte %........
+	byte %11......
+	byte %11......
+	byte %........
+	byte %11......
+	byte %11......
+	byte %........
+	byte %11......
+	byte %11......
+	byte %........
+	byte %11.11.11
+	byte %11.11.11
+;I
+	byte %11.11.11
+	byte %11.11.11
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %11.11.11
+	byte %11.11.11
+;T
+	byte %11.11.11
+	byte %11.11.11
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %...11...
+	byte %...11...
+;Z
+	byte %11.11.11
+	byte %11.11.11
+	byte %........
+	byte %......11
+	byte %......11
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %........
+	byte %11......
+	byte %11......
+	byte %........
+	byte %11.11.11
+	byte %11.11.11
+;the target for bcd operations
+bcd_target

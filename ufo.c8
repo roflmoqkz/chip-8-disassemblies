@@ -1,0 +1,218 @@
+;place to store bcd result
+bcd_store equ #2f8
+;score
+big_ufo_score equ 5
+small_ufo_score equ 15
+initial_ships equ 15
+;keys
+left equ 4
+middle equ 5
+right equ 6
+;position of the ship
+ship_x var v4
+ship_y var v5
+;the direction the ship is moving
+direction var v6
+;our score
+score var v7
+;number of ships remaining
+num_ships var v8
+;position of the big ufo
+big_ufo_x var v9
+big_ufo_y var va
+;position of the small ufo
+small_ufo_x var vb
+small_ufo_y var vc
+;has the ship launched?
+ship_launched var ve
+;initialize big ufo
+	ld i,big_ufo
+	ld big_ufo_x,56
+	ld big_ufo_y,8
+;draw big ufo
+	drw big_ufo_x,big_ufo_y,3
+	ld i,small_ufo
+;initialize small_ufo
+	ld small_ufo_x,0
+	ld small_ufo_y,3
+	drw small_ufo_x,small_ufo_y,3
+;draw base
+	ld i,base
+	ld v4,29
+	ld v5,31
+	drw v4,v5,1
+;init score and ships
+	ld score,0
+	ld ships,initial_ships
+	call draw_score
+new_ship
+	call draw_ships
+;check if we still have ships
+	sne ships,0
+;if we don't, go in an infinite loop
+infinite_loop
+	jp infinite_loop
+;init ship position
+	ld ship_x,30
+	ld ship_y,28
+;draw ship
+	ld i,ship
+	drw ship_x,ship_y,3
+;ship not yet launched
+	ld ship_launched,0
+main_loop
+;direction of 128 means no movement
+	ld direction,128
+;check if left pressed
+	ld vd,left
+	sknp vd
+	ld direction,-1
+;check if center pressed
+	ld vd,center
+	sknp vd
+	ld direction,0
+;check if right pressed
+	ld vd,right
+	sknp vd
+	ld direction,1
+;launch the ship if a key was pressed
+	se direction,128
+	call launch_ship
+move_ship_loop
+;clear the small ufo
+	ld i,small_ufo
+	drw small_ufo_x,small_ufo_y,3
+;50% chance of moving the small ufo to the right
+	rnd vd,1
+	add small_ufo_x,vd
+;draw the small ufo in its new place
+	drw small_ufo_x,small_ufo_y,3
+;check for collision (bug, this should be in the ship movement code)
+	se vf,0
+	jp small_ufo_hit
+;clear the big ufo
+	ld i,big_ufo
+	drw big_ufo_x,big_ufo_y,3
+;probably intended to move the ship 50% of the time but because of a bug it moves
+;every time
+	rnd vd,1
+	se vd,0
+	ld vd,-1
+	add big_ufo_x,-2
+;draw the small ufo in its new place
+	drw big_ufo_x,big_ufo_y,3
+;check for collision (bug, this should be in the ship movement code)
+	se vf,0
+;go back if the ship hasn't been launched
+	sne ship_launched,0
+	jp main_loop
+	
+	ld i,ship
+	drw ship_x,ship_y,3
+;check if the ship reached the top of the screen
+	sne ship_y,0
+	jp ship_hit
+;move ship up
+	add ship_y,-1
+;move ship according to the direction
+	add ship_x,direction
+;check if we hit anything
+	se vf,1
+	jp move_ship_loop
+;determine which ship was hit (small-y below 8, big-y is 8 or above)
+	ld vd,8
+	and vd,ship_y
+	sne vd,8
+	jp big_ufo_hit
+	jp small_ufo_hit
+ship_hit
+;hide number of ships
+	call draw_ships
+;remove ship
+	add num_ships,-1
+	jp new_ship
+	
+big_ufo_hit ;28c
+;hide score
+	call draw_score
+;add score
+	add score,big_ufo_score
+;draw new score
+	jp end_hit
+small_ufo_hit
+;hide score
+	call draw_score
+;add score
+	add score,small_ufo_score
+;draw new score
+	call draw_score
+;play beep for 3 frames
+	ld vd,3
+	ld st,vd
+;hide ship
+	ld i,ship
+	drw ship_x,ship_y,3
+;do ship hit routine
+	jp ship_hit
+	
+;draws the score
+draw_score
+	ld i,bcd_store
+	bcd v7
+	ld v3,0
+	call draw_number
+	ret
+	
+;draws the number of ships
+draw_ships
+	ld i,bcd_store
+	bcd v8
+	ld v3,50
+	call draw_number
+	ret
+
+;draws the number in i at x coordinate in v3
+draw_number
+;set y position
+	ld vd,27
+;load number
+	ld v2,[i]
+;draw hundreds digit
+	ld f,v0
+	drw v3,vd,5
+	add v3,5
+;draw tens digit
+	ld f,v1
+	drw v3,vd,5
+	add v3,5
+;draw units digit
+	ld f,v2
+	drw v3,vd,5
+	ret
+;no idea why this byte is here
+	byte #01
+big_ufo
+	byte %.11111..
+	byte %1111111.
+	byte %.11111..
+small_ufo
+	byte %.11.....
+	byte %1111....
+	byte %.11.....
+ship
+	byte %.1......
+	byte %111.....
+	byte %1.1.....
+base
+	byte %1111111.
+;no idea why this byte is here
+	byte #d4
+
+;launches the ship
+launch_ship 
+	ld ship_launched,1
+;beep for 16 frames
+	ld vd,16
+	ld st,vd
+	ret
+	

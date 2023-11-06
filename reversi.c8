@@ -1,0 +1,500 @@
+;directions/keys
+up_left equ 1
+up equ 2
+up_right equ 3
+left equ 4
+right equ 6
+down_left equ 7
+down equ 8
+down_right equ 9
+;key to place disk
+place equ 5
+;key to swap player (even when illegal)
+swap_player equ 15
+;colors
+white equ 0
+black equ #80
+;variables
+;origin of probing from disk
+origin_x var v3
+origin_y var v4
+;checks if we have to draw cursor when it moves
+cursor_drawn var v8
+;direction of movement
+move_dir var v9
+;position of cursor (physical)
+cursor_x var va
+cursor_y var vb
+;the player now  being controlled
+current_player var vc
+;scores of both players
+white_score var vd
+black_score var ve
+	ld white_score,2
+	ld black_score,2
+	ld current_player,white
+	ld i,dot
+;initial dot position
+	ld cursor_y,0
+draw_dot_row_loop
+	ld cursor_x,17
+draw_dots_loop
+	drw cursor_x,cursor_y,3
+;check if done drawing row
+	se cursor_x,45
+	jp finished_dot_row
+;check if finished drawing dots
+	sne cursor_y,28
+	jp finished_dots
+;next row
+	add cursor_y,4
+	jp draw_dots_loop
+finished_dot_row
+;next dot
+	add cursor_x,4
+	jp draw_dot_row_loop
+finished_dots
+;hide dots of 2 white disks
+	ld cursor_x,29
+	ld cursor_y,12
+	drw cursor_x,cursor_y,3
+	add cursor_x,4
+	add cursor_y,4
+	drw cursor_x,cursor_y,3
+;draw the 4 disks
+	ld i,disk
+	drw cursor_x,cursor_y,3
+	add cursor_x,-4
+	drw cursor_x,cursor_y,3
+	add cursor_y,-4
+	drw cursor_x,cursor_y,3
+	add cursor_x,4
+	drw cursor_x,cursor_y,3
+;white score frame
+	ld v0,2
+	call draw_score_frame
+;black score frame
+	ld v0,52
+	call draw_score_frame
+;fill dots
+	ld i,dots
+	ld v0,52
+	call draw_score_frame
+	call draw_both_scores
+	ld move_dir,1
+	call move_cursor
+;cursor not drawn
+	ld cursor_drawn,0
+main_loop
+	call blink
+;check one by one input keys
+	ld direction,0
+check_input_loop
+;loop until done
+	sne direction,9
+	jp no_key_pressed
+;check key pressed
+	add direction,1
+	skp direction,1
+	jp check_input_loop
+;check if 5 was pressed
+	sne direction,place
+	jp place_pressed
+;don't draw if not drawn
+	se cursor_drawn,0
+	call draw_cursor
+	call move_cursor
+;draw cursor again
+	se cursor_drawn,0
+	call draw_cursor
+;play short beep
+	ld v1,2
+	ld st,v1
+	jp main_loop
+	
+no_key_pressed
+;check if 15 pressed
+	ld direction,swap_player
+	skp direction
+	jp main_loop
+return_from_flips
+;hide cursor
+	se cursor_drawn,0
+	call draw_cursor
+;swap player
+	add current_player,black
+;draw cursor again
+	se cursor_drawn,0
+	call draw_cursor
+;play long beep
+ld v1,24
+ld st,v1
+;wait for key release
+wait_for_key_release_loop
+	sknp direction
+	jp wait_for_key_release_loop
+	jp main_loop
+
+place_pressed
+;ensure cursor is not drawn
+	se cursor_drawn,0
+	call blink
+	call affirm_placement
+;check if can place
+	se v1,0
+	jp main_loop
+	ld origin_x,cursor_x
+	ld origin_y,cursor_y
+	ld direction,0
+	call check_flips
+;check if we found disks to flip
+	sne v2,0
+	jp main_loop
+;hide scores
+	call draw_both_scores
+;draw disk
+	ld i,disk
+	drw origin_x,origin_y,3
+;draw dot if white player
+	se current_player,white
+	jp dont_draw_dot
+	ld i,dot
+	drw origin_x,origin_y,3
+dont_draw_dot
+;increment score of player depending on disk placed
+	se current_player,white
+	jp inc_black_score
+	add white_score,1
+	jp after_inc_score
+inc_black_score
+	add black_score,1
+after_inc_score
+	call flip_disks
+;this time it will start where left off
+	call check_flips
+;flip disks again if needed
+	se v2,0
+	jp after_inc_score
+	call draw_both_scores
+;check if all disks have been placed
+	ld v1,white_score
+	add v1,black_score
+	se v1,64
+	jp return_from_flips
+;play annoying victory loop
+victory_loop
+	call beep_and_wait
+	call beep_and_wait
+	call short_wait
+	call beep_and_wait
+	jp victory_loop
+;no idea what this is
+	byte 1
+;graphics
+dot ;2d7
+	byte %........
+	byte %.1......
+	byte %........
+;black disk (as there is a dot there
+disk
+	byte %111.....
+	byte %1.1.....
+	byte %111.....
+;no idea what this is
+	byte #d4
+
+;draw squares around score x=v0 with graphic at i
+draw_score_frame
+;draw the 3 squares
+	ld v1,11
+	drw v0,v1,3
+	add v0,4
+;v7 will always be 0
+	drw v0,v7,3
+	add v0,4
+	drw v0,v1,3
+	ret
+	
+;draw the score depending on vc 0-white #80-black
+draw_score
+	ld i,440
+	se current_player,white
+	jp draw_black_score
+;set position of white score
+	ld v5,2
+	bcd white_score
+draw_correct_score
+	ld v6,4
+;get digits
+	ld v2,[i]
+;draw tens digit
+	ld f,v1
+	drw v5,v6,5
+;draw units digit
+	add v5,7
+	ld f,v2
+	drw v5,v6,5
+	ret
+draw_black_score
+;change the x position and score vars
+	ld v5,52
+	bcd black_score
+	jp draw_correct_score
+
+;moves cursor depending on direction in v9, set v7 to -1 if move invalid
+move_cursor
+;each branch checks bounds and moves according to direction
+	ld v7,0
+;check each direction
+	sne v9,down_right
+	jp move_down_right
+	sne v9,down
+	jp move_down
+	sne v9,down_left
+	jp move_down_left
+	sne v9,right
+	jp move_right
+	sne v9,left
+	jp move_left
+	sne v9,up_right
+	jp move_up_right
+	sne v9,up_left
+	jp move_up_left
+;check top
+	sne cursor_y,0
+	jp invalid_move
+;could be rearranged to be more efficient
+move_up
+;move up
+	add cursor_y,-4
+	ret
+invalid_move
+;set invalid flag
+	ld v7,-1
+	ret
+move_up_left
+;check top
+	sne cursor_y,0
+	jp invalid_move
+;check left
+	sne cursor_x,17
+	jp invalid_move
+;move
+	add cursor_x,-4
+	jp move_up
+move_up_right
+;check top
+	sne cursor_y,0
+	jp invalid_move
+;check right
+	sne cursor_x,45
+	jp invalid_move
+;move
+	add cursor_x,4
+	jp move_up
+move_left
+;check left
+	sne cursor_x,17
+	jp invalid_move
+;move
+	add cursor_x,-4
+	ret
+move_right
+;check right
+	sne cursor_x,45
+	jp invalid_move
+;move
+	add cursor_x,4
+	ret
+move_down
+;check bottom
+	sne cursor_y,28
+	jp invalid_move
+;move
+move_down_diag
+	add cursor_y,4
+	ret
+move_down_left
+;check bottom
+	sne cursor_y,28
+	jp invalid_move
+;check left
+	sne cursor_x,17
+	jp invalid_move
+;move
+	add cursor_x,-4
+	jp move_down_diag
+move_down_right
+;check bottom
+	sne cursor_y,28
+	jp invalid_move
+;check right
+	sne cursor_x,45
+	jp invalid_move
+;move
+	add cursor_x,4
+	jp move_down_diag
+
+;blinks score and cursor
+blink
+	call short_wait
+	call draw_score
+	call draw_cursor
+	add cursor_drawn,black
+	ret
+	
+;wait 10 frames
+short_wait
+	ld v1,10
+	ld dt,v1
+wait_loop
+	ld v1,dt
+	se v1,0
+	jp wait_loop
+	ret
+
+draw_both_scores
+	call draw_score
+;opposite color
+	add current_player,black
+	call draw_score
+;restore color
+	add current_player,black
+	ret
+
+;draw cursor at position
+draw_cursor
+	ld i,dot
+draw_sprite
+	drw cursor_x,cursor_y,3
+	ret
+
+;place a disk at the current position
+draw_disk
+	ld i,disk
+	jp draw_sprite
+
+;checks if disk can be placed (0-can place #80-same color #ff-opposite color)
+affirm_placement
+	call draw_disk
+;check if there is already a disk there
+	ld v1,vf
+	call draw_disk
+	sne v1,0
+	jp can_be_placed
+;check if it is black
+	call draw_cursor
+	ld v1,vf
+	call draw_cursor
+	se v1,0
+	jp black_disk_detected
+;check white disk on white player
+	se current_player,white
+	jp current_player_black
+same_color
+	ld v1,#80
+	ret
+black_disk_detected
+;check black disk on black player
+	se current_player,white
+	jp same_color
+current_player_black
+	ld v1,-1
+	ret
+can_be_placed
+	ld v1,0
+	ret
+
+;checks for disks to flip in all directions
+check_flips
+;reset origin
+	ld cursor_x,origin_x
+	ld cursor_y,origin_y
+;next direction
+	add direction,1
+;5 is not a direction
+	sne direction,5
+	add direction,1
+;start counting number of disks to flip
+	ld v2,0
+;check if we ran out of directions
+	sne v9,10
+	ret
+;go by direction
+move_again
+	call move_cursor
+	call affirm_placement
+;if no disk, next direction
+	sne v1,0
+	jp check_flips
+;check if opposite color
+	se v1,#80
+	jp opposite_color
+;if it is the same color and we have seen disks then return
+	se v2,0
+	ret
+;otherwise ignore it
+	jp check_flips
+opposite_color
+;check if out of bounds
+	sne v7,-1
+	jp check_flips
+;found a disk, then move again
+	add v2,1
+	jp move_again
+	
+flip_disks
+;get opposite direction (could be optimised using subn)
+	ld v1,direction
+	ld direction,10
+	sub v9,v1
+move_to_next_disk
+	call move_cursor
+;get x offset of disk
+	ld v1,cursor_x
+	sub v1,origin_x
+;check if x is different (not in origin)
+	se v1,0
+	jp flip_disk
+;get y offset of disk
+	ld v1,cursor_y
+	sub v1,origin_y
+;check if y is different (not in origin)
+	se v1,0
+	jp flip_disk
+;flip direction again
+	ld v1,direction
+	ld direction,10
+	sub v9,v1
+	ret
+	
+flip_disk
+;flip disk
+	call draw_cursor
+;check player to adjust scores according
+	se current_player,white
+	jp adjust_scores_to_black
+;move score from black to white
+	add white_score,1
+	add black_score,-1
+	jp after_score_adjust
+adjust_scores_to_black
+;otherwise move score from white to black
+	add white_score,-1
+	add black_score,1
+after_score_adjust
+	call beep_and_wait
+	jp move_to_next_disk
+	
+beep_and_wait
+;play slightly longer beep
+	ld v1,4
+	ld st,v1
+	call short_wait
+	ret
+;unreachable code
+	byte #14,#24,#4a,#2d,#14,#24,#7a,#04,#14,#20
+	
+;target for bcd operations
+bcd_target ;440
+	pad 2

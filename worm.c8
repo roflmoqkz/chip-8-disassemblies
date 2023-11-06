@@ -1,0 +1,325 @@
+;directions
+right equ 0
+up equ 2
+left equ 4
+down equ 6
+;keys
+rot_left equ 8
+rot_right equ 9
+;num apples eaten
+score var v5
+;have keys been pressed in past frame (6-pressed)
+rot_left_prev var v6
+rot_right_prev var v7
+;the index of the segment of the head
+head_index var v8
+worm_dir var v9
+;position of head of worm
+worm_x var va
+worm_y var vb
+worm_length var ve
+;jump past the copyright
+	jp start
+;target for bcd operations, shared with copyright
+bcd_target
+	byte "Worm"
+zero ;the zero at the bottom (bug, should be final score)	
+	byte "RB92"
+;the initial values of all variables
+initial_vars
+	byte 0,0
+	byte 0 ;top and left wall position
+	byte 62 ;bottom wall position
+	byte 5 ;position of start of wall
+	byte 0 ;score
+	byte 43 ;bars y pos
+	byte 124 ;bars x pos
+	byte 0 ;zeroth segment
+	byte 0 ;direction (right)
+	byte 6 ;worm x
+	byte 30 ;worm y
+	byte 1 ;increment i after writing 0
+	byte 0
+	byte 4 ;worm length
+start
+;set high resolution
+	high
+	cls
+	ld i,initial_vars
+	ld ve,[i]
+	ld i,worm_segs_x
+;write 256 zeroes at 368 (why not y, not needed)
+clear_368_loop
+	ld [i],v0
+	add i,vc
+	add v1,1
+	se v1,0
+	jp clear_368_loop
+	ld i,worm_head
+	drw va,vb,3
+draw_horiz_walls_loop
+;draw both walls
+	drw v4,v2,1
+	drw v4,v3,1
+;next wall segment
+	add v4,3
+;loop until complete
+	se v4,122
+	jp draw_horiz_walls_loop
+	ld i,vert_wall
+	ld v3,4
+;draw both walls
+draw_vert_walls_loop
+	drw v3,v2,9
+	add v4,v2,9
+;next wall segment
+	add v2,9
+;loop until complete
+	se v2,63
+	jp draw_vert_walls_loop
+	ld i,zero
+	ld v0,[i]
+;get digits of zero
+	ld i,bcd_target
+	bcd v0
+	ld v3,46
+	call draw_number
+	ld i,bcd_target
+	bcd score
+	call draw_score
+	call spawn_apple
+;draw bars
+draw_bars_loop
+	ld i,bar
+	drw v7,v6,1
+;next bar
+	add v6,-2
+;loop until complete
+	se v6,17
+	jp draw_bars_loop
+main_loop
+;ensure movement takes 6 frames
+	ld v3,6
+	ld dt,v3
+	ld i,worm_segs_x
+;get x of head
+	add i,head_index
+	ld v0,[i]
+	ld v4,v0
+;write new head into memory
+	ld v0,worm_x
+	ld [i],v0
+	ld i,worm_segs_y
+;get y of head
+	add i,head_index
+	ld v0,[i]
+	ld v1,v0
+;write new worm y into memory
+	ld v0,worm_y
+	ld [i],v0
+	ld i,worm_body
+;check if it isn't a blank segment (when starting)
+	se v4,0
+;draw worm body
+	drw v4,v1,3
+;get worm velocity based on direction
+	ld i,worm_vels
+	add i,worm_dir
+	ld v1,[i]
+;convert head to body
+	ld i,worm_hole
+	drw worm_x,worm_y,2
+	add worm_x,v0
+	add worm_y,v1
+;draw new worm head
+	ld i,worm_head
+	drw worm_x,worm_y,3
+;check collision
+	se vf,0
+	jp worm_hit
+;1/16 chance of elongating worm
+	rnd v0,15
+	sne v0,0
+	call elongate_worm
+return_worm_hit
+;move head to the next index
+	add head_index,1
+;go to the beginning to conserve memory
+	sne head_index,worm_length
+	ld head_index,0
+input_loop
+;check rot left
+	ld v1,rot_left
+	skp v1
+;set key not pressed
+	ld rot_left_prev,0
+	skp v1
+	jp not_rot_left
+;check key wasn't pressed
+	se rot_left_prev,0
+	jp not_rot_left
+;roatate left
+	add direction,2
+;set key pressed
+	ld rot_left_prev,6
+;wrap around
+	and v9,rot_left_prev
+not_rot_left
+;check rot right
+	ld v1,rot_right
+	skp v1
+;set key not pressed
+	ld rot_right_prev,0
+	skp v1
+	jp not_rot_right
+;check key wasn't pressed
+	se rot_right_prev,0
+	jp not_rot_left
+;roatate right
+	add v9,-2
+;set key pressed
+	ld rot_right_prev,6
+;wrap around
+	and v9,rot_right_prev
+	
+not_rot_right
+;check if timer gone
+	ld v3,dt
+	se v3,0
+	jp input_loop
+	jp main_loop
+
+;clear and draw score
+redraw_score
+;clear score
+	call draw_score
+;get score digits
+	ld i,bcd_target
+	bcd v5
+draw_score
+	ld v3,0
+;draw number in bcd target at y=v3
+draw_number
+	ld v4,124
+	ld i,bcd_target
+	ld v2,[i]
+;draw hundreds digit
+	ld f,v0
+	drw v4,v3,5
+;draw tens digit
+	add v3,6
+	ld f,v1
+	drw v4,v3,5
+;draw units digit
+	add v3,6
+	ld f,v2
+	drw v4,v3,5
+	ret
+	
+worm_hit
+	call spawn_new_apple
+;blink worm head to detect collision
+	drw worm_x,worm_y,3
+	drw worm_x,worm_y,3
+	se vf,0
+	jp hit_wall
+;play beep
+	ld v4,2
+	ld st,v4
+;increment score
+	add v5,1
+	call redraw_score
+	jp return_worm_hit
+	
+hit_wall
+;play a bit longer beep
+	ld v4,10
+	ld st,v4
+;clear head
+	drw worm_x,worm_y,3
+;v0 and v1 hold the velocity so move back
+	sub worm_x,v0
+	sub worm_y,v1
+;make previous segment head
+	ld i,worm_hole
+	draw worm_x,worm_y,2
+;check if we have a positive score??
+	ld i,zero
+	ld v0,[i]
+	sub v0,v5
+	ld v0,v5
+	ld [i],v0
+;if not, get in an infinite loop??
+infinite_loop
+	jp infinite_loop
+;otherwise elongate wom??? (these are probably bugs
+
+elongate_worm
+	add worm_length,1
+	ret
+
+spawn_apple ;332
+	ld i,apple
+spawn_apple_loop
+;get random position of apple x:2-126 y:2-62
+;needs to be 2mod4 to align with worm
+	rnd vc,124
+	add vc,2
+	rnd vd,60
+	add vd,2
+;draw apple
+	drw vc,vd,7
+;check collision
+	sne vf,0
+	ret
+;if collided, clear apple and draw again
+;entry point for clearing and spawning an apple
+spawn_new_apple
+	ld i,apple
+	drw vc,vd,7
+	jp spawn_apple_loop
+
+;the velocity the worm moves depending on directions (x then y)
+worm_vels
+	byte 4,0 ;right (default
+	byte 0,-4
+	byte -4,0
+	byte 0,4
+;shared with horiz wall
+worm_head
+	byte %111.....
+	byte %111.....
+;shared with worm head
+worm_body
+	byte %111.....
+	byte %1.1.....
+	byte %111.....
+;converts between head and body
+	byte %........
+	byte %.1......
+worm_hole
+apple
+	byte %..111...
+	byte %.11111..
+	byte %11.1111.
+	byte %1111111.
+	byte %1111111.
+	byte %.11111..
+	byte %..111...
+bar
+	byte %1111....
+;should be shorter to match speed of drawing horiz wall	
+vert_wall
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;stores the positions of all the segments of the worm
+worm_segs_x
+worm_segs_y equ worm_segs_x+256
+	

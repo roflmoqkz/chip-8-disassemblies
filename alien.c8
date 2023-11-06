@@ -1,0 +1,703 @@
+;controls
+left_key equ 3
+right_key equ 12
+shoot_key equ 10
+;signals
+level_complete_signal equ #42
+ship_hit_signal equ #63
+;variables
+;position of alien's bullet
+alien_bullet_x var v2
+alien_bullet_y var v3
+;current level
+level var v4
+;position of ship's bullet
+ship_bullet_x var v5
+ship_bullet_y var v6
+;position of ship
+ship_x var v8
+ship_y var v9
+;position of leftmost alien
+alien_x var vd
+alien_y var ve
+;jump past the copyright
+	jp start
+	byte "Jonas Lindstedt",0
+start
+;high resolution
+	high
+	jp intro
+start_game
+	ld level,1
+	ld i,floor
+;position of floor
+	ld vb,0
+	ld vb,59
+draw_floor_loop
+;draw floor segment
+	drw vb,vc,4
+;next segment
+	add vb,8
+;loop until done
+	se vb,128
+	jp draw_floor_loop
+;load ship position
+	ld ship_x,60
+	ld i,ship
+	ld ship_y,53
+	drw ship_x,ship_y,6
+;start with no alien bullet
+	ld alien_bullet_y,0
+game_loop
+;check if we have an alien bullet
+	sne alien_bullet_y,0
+	jp no_bullet
+;hide the alien bullet
+	ld i,bullet
+	drw alien_bullet_x,alien_bullet_y,2
+;then destroy it
+	ld alien_bullet_y,0
+no_bullet
+;get location of graphic according to level (level-1) mod 4
+	ld vc,level
+	add vc,-1
+	ld vb,3
+	and vc,vb
+	ld vb,0
+get_graphic_loop
+	sne vc,0
+	jp get_graphic_done
+;add 5 for each graphic because they are 5 tall
+	add vb,5
+	add vc,-1
+	jp get_graphic_loop
+get_graphic_done
+	ld v1,0
+;copy vars from data to memory
+;bad to use a loop, could be done with ld v5,[i]
+load_vars_loop
+;load byte
+	ld i,aliens
+	add vb,0
+	ld v0,[i]
+;store byte
+	ld i,alien_graphic
+	add i,v1
+	ld [i],v0
+;next byte
+	add v1,1
+	add vb,1
+;loop until done
+	se v1,6
+	jp load_vars_loop
+;initial position of aliens
+	ld alien_x,8
+	ld alien_y,5
+	ld v6,0
+	ld va,1
+;draw alien
+	ld i,alien_graphic
+	ld v0,alien_x,8
+draw_aliens_loop
+	drw v0,alien_y,5
+;next alien
+	add v0,20
+;loop until done
+	se v0,108
+	jp draw_aliens_loop
+	call init_level
+main_loop
+	call control_ship
+	call process_alien_bullet
+	call process_ship_bullet
+;check if level win
+	sne vf,level_complete_signal
+	jp game_loop
+	call move_aliens
+;check if ship destroyed, if so, go to intro
+	se v4,63
+	jp main_loop
+	
+intro
+	cls 
+	ld i,alien_logo
+;position of alien logo
+	ld vd,40
+	ld ve,10
+;increment i by 10 after every draw because it is 10 tall
+	ld vc,10
+draw_alien_logo_loop
+;draw segment
+	drw vd,ve,10
+;next segment
+	add vd,8
+	add i,vc
+;loop until done
+	se vd,88
+	jp draw_alien_logo_loop
+	ld i,by_jl
+;position of by jl
+	ld vd,52
+	ld ve,19
+;increment i by 5 after every draw because it is 5 tall
+	ld vc,5
+draw_by_jl_loop
+;draw segment
+	drw vd,ve,5
+;next segment
+	add vd,8
+	add i,vc
+;loop until done
+	se vd,76
+	jp draw_by_jl_loop
+;position of score text
+	ld vd,45
+	ld ve,40
+;increment i by 5 after every draw because it is 5 tall
+	ld vc,5
+draw_score_text_loop
+;draw segment
+	drw vd,ve,5
+;next segment
+	add vd,8
+	add i,vc
+;loop until done
+	se vd,76
+	jp draw_score_text_loop
+;get score
+	ld i,score
+	ld v0,[i]
+;get score digits
+	ld i,bcd_target
+	bcd v0
+;digit counter
+	ld vc,0
+draw_score_loop
+;get current digit
+	ld i,bcd_target
+	add i,vc
+	ld v0,[i]
+;draw digit
+	ld f,v0
+	drw vd,ve,5
+;next digit
+	add vd,5
+	add vc,1
+;loop until done
+	se vc,3
+	jp draw_score_loop
+;wait until shoot key is pressed
+	ld vc,shoot_key
+wait_for_start_loop
+	skp vc
+	jp wait_for_start_loop
+;reset score and
+	ld i,514
+	ld v0,0
+	ld v1,1
+	ld [i],v1
+;scroll down 54 pixels slowly
+	ld vc,54
+scroll_down_loop
+	scd 1
+;loop until done
+	add vc,-1
+	se vc,0
+	jp scroll_down_loop
+	jp start_game
+
+;make aliens shoot and move bullet
+process_alien_bullet
+;check if we have an alien bullet
+	se alien_bullet_y,0
+	jp alien_bullet_exists
+;1/16 chance of alien firing
+	rnd vc,15
+	se vc,0
+	jp no_fire
+;get a random alien (3 in the middle have 1/4 chance while sides have 1/8 chance)
+	rnd vc,7
+	add vc,1
+	shr vc
+;check if alien is dead
+	ld i,alien_health
+	add i,vc
+	ld v0,[i]
+	sne v0,0
+	jp no_fire
+;set bullet position
+	ld alien_bullet_x,alien_x
+	ld alien_bullet_y,alien_y
+	add alien_bullet_y,5
+position_bullet_loop
+;add x to position until reached right alien
+	sne vc,0
+	jp position_bullet_done
+	add alien_bullet_x,20
+;next alien
+	add vc,-1
+	jp position_bullet_loop
+redraw_bullet
+	ld i,bullet
+;draw the bullet
+	drw alien_bullet_x,alien_bullet_x,2
+;check collision
+	se vf,0
+	jp alien_bullet_hit
+no_fire ;328
+	ret
+alien_bullet_exists
+;hide the bullet
+	ld i,bullet
+	drw alien_bullet_x,alien_bullet_y,2
+;move the bullet down
+	add alien_bullet_y,1
+;check if it hit bottom
+	se alien_bullet_y,58
+	jp redraw_bullet
+;destroy bullet
+	ld alien_bullet_y,0
+	ret
+alien_bullet_hit
+	ld vc,53
+;check if collision happend before 53 to make sure it happened with the ship
+	ld vb,alien_bullet_y
+	sub vb,53
+	se vf,0
+;signify ship hit
+	ld level,ship_hit_signal
+	ret
+
+init_level
+;calculate initial alien health as (level+1)/2
+	ld v0,level
+	add v0,1
+	shr v0
+	ld vc,0
+load_alien_health_loop
+;load the health of each alien
+	ld i,alien_health
+	add i,vc
+	ld [i],v0
+	add vc,1
+	se vc,5
+	jp load_alien_health_loop
+;get digits of level
+	ld bcd_target
+	bcd level
+	call draw_level
+;wait 2 seconds
+	ld vc,120
+	ld dt,vc
+wait_loop
+	ld vc,dt
+	se vc,0
+	jp wait_loop
+;hide level number
+	call draw_level
+	ret
+	
+;draw the level number in the middle of the screen
+draw_numebr
+;get tens digit
+	ld bcd_target+1
+	ld v0,[i]
+	ld hf,v0
+;set position of number
+	ld vc,55
+	ld vb,27
+;draw tens digit
+	drw vc,vb,10
+;get units digit
+	ld i,bcd_target+2
+	ld hf,v0
+;draw units digit
+	ld vc,65
+	drw vc,vb,10
+	ret
+
+;move the ship's bullet and check and process collision
+process_ship_bullet
+	sne ship_bullet_y,0
+	jp no_ship_bullet
+;hide bullet
+	ld i,bullet
+	drw ship_bullet_x,ship_bullet_y,2
+;move bullet up
+	add ship_bullet_y,-1
+;check if bullet reached the top
+	sne ship_bullet_y,0
+	jp no_ship_bullet
+;redraw bullet
+	drw ship_bullet_x,ship_bullet_y,2
+;check collision
+	sne vf,0
+	jp no_ship_bullet
+;check if the bullet is at least at the position of the aliens
+	ld vc,alien_y
+	sub vc,ship_bullet_y
+	sne vf,0
+	jp bullet_hit_bullet
+;hide bullet
+	drw ship_bullet_x,ship_bullet_y,2
+;destroy bullet and adjust x position for figuring out relative position
+	add ship_bullet_x,-5
+	ld ship_bullet_y,0
+	ld vc,alien_x
+	ld v0,0
+find_hit_ship_loop
+;get check if the bullet hit the current ship
+	ld vb,vc
+	sub vb,ship_bullet_x
+	se vf,0
+	jp ship_found
+;move on to the next ship
+	add vc,20
+	add v0,1
+	jp find_hit_ship_loop
+;decrease hit alien health
+	ld i,alien_health
+	add i,v0
+	ld v0,[i]
+	add v0,-1
+	ld [i],v0
+;hide alien if destroyed
+	ld i,alien_graphic
+	sne v0,0
+	drw vc,alien_y,5
+;play short beep
+	ld vc,10
+	ld st,vc
+;flip 514
+	ld i,514
+	ld v0,[i]
+	ld vc,#ff
+	xor v0,vc
+	ld [i],v0
+;increment score if alien destroyed
+	se v0,0
+	jp dont_increment_score
+	ld i,score
+	ld v0,[i]
+	add v0,1
+	ld [i],v0
+dont_increment_score
+;iterate over all aliens
+	ld vc,0
+;count how many are alive
+	ld vb,0
+count_living_aliens_loop
+;check if alien is alive
+	ld i,alien_health
+	add i,vc
+	ld v0,[i]
+;increment counter if found alive
+	se v0,0
+	add vb,1
+;next alien
+	add vc,1
+;loop until done
+	se vc,5
+	jp count_living_aliens_loop
+;check if all are dead
+	se vb,0
+	jp no_ship_bullet
+;next level
+	add level,1
+;signify level complete
+	ld vf,level_complete_signal
+no_ship_bullet ;400
+	ret
+bullet_hit_bullet
+;hide both bullets
+	ld i,bullet
+	drw alien_bullet_x,alien_bullet_y,2
+	drw ship_bullet_x,ship_bullet_y,2
+;destroy both bullets
+	ld alien_bullet_y,0
+	ld ship_bullet_y,0
+	ret
+
+;handle keyboard input
+control_ship
+;this is the movement of the ship
+	ld vb,0
+;check for left key
+	ld vc,left_key
+	sknp vc
+;load left movement
+	ld vb,-1
+;check for right key
+	ld vc,right_key
+	sknp vc
+;load right movement
+	ld vb,1
+;check if we have moved
+	sne vb,0
+	jp no_movement
+;constrain movement on the left
+	sne ship_x,1
+	ld vb,1
+;constrain movement on the right
+	sne ship_x,120
+	ld vb,-1
+;hide ship
+	ld i,ship
+	ld ship_y,53
+	drw ship_x,ship_y,6
+;move the ship
+	add ship_x,vb
+;draw it again
+	drw ship_x,ship_y,6
+no_movement
+;check if shoot key is pressed
+	ld vc,shoot_key
+	skp vc
+	jp no_shoot
+;check if we don't already have a bullet
+	se ship_bullet_y,0
+	jp no_shoot
+;instantiate bullet
+	ld ship_bullet_x,ship_x
+	ld ship_bullet_y,53
+;draw the bullet
+	drw ship_bullet_x,ship_bullet_y,2
+no_shoot
+	ret
+
+;moves the aliens
+move_aliens
+;check if enough time passed since last alien move
+	ld v0,dt
+	se v0,0
+	jp dont_move_aliens
+;10 frames between every movement
+	ld v0,10
+	ld dt,v0
+;move down if at edge
+	ld v7,0
+;check if aliens at right edge
+	se alien_x,33
+	jp not_right_edge
+	ld va,-1
+	jp move_down_too
+;check if aliens at left edge
+not_right_edge
+	se alien_x,7
+;now we can move both directions
+	jp not_left_edge
+	ld va,1
+move_down_too
+	ld v7,1
+not_left_edge
+	call do_movement
+dont_move_aliens
+	ret
+
+;actually moves the aliens	
+do_movement
+	ld vb,alien_x
+	ld vc,0
+move_aliens_loop
+	ld v9,vb
+	ld v1,alien_y
+;check if alien is dead
+	ld i,alien_health
+	add i,vc
+	ld v0,[i]
+	sne v0,0
+	jp alien_is_dead
+;hide alien
+	drw v9,v1,5
+	add v9,va
+	add v1,v7
+;redraw alien in new spot
+	drw v9,v1,5
+alien_is_dead
+;next alien
+	add vc,1
+	add vb,20
+;loop until done
+	se vc,5
+	jp move_aliens_loop
+;move the aliens
+	add alien_x,va
+	add alien_y,v7
+;destroy ship if aliens are low enough
+	sne alien_y,48
+	ld v4,#ship_hit_signal
+	ret
+
+;graphics	
+alien_logo
+	byte %..1111..
+	byte %....11..
+	byte %...1111.
+	byte %...1111.
+	byte %..11..11
+	byte %..11..11
+	byte %..111111
+	byte %.11....1
+	byte %.11....1
+	byte %1111..11
+	
+	byte %...11111
+	byte %....11..
+	byte %....11..
+	byte %....11..
+	byte %....11..
+	byte %....11..
+	byte %....11..
+	byte %1...11..
+	byte %1...11..
+	byte %11.11111
+	
+	byte %.....111
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.......1
+	byte %.11....1
+	byte %111..111
+	
+	byte %111..111
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %1.....11
+	byte %111..111
+	
+	byte %11111...
+	byte %...11..1
+	byte %.......1
+	byte %.11....1
+	byte %111....1
+	byte %.11....1
+	byte %.......1
+	byte %.......1
+	byte %...11..1
+	byte %11111.11
+	
+	byte %1..11111
+	byte %1....11.
+	byte %11...11.
+	byte %111..11.
+	byte %111..11.
+	byte %1.11.11.
+	byte %1..1111.
+	byte %1..1111.
+	byte %1...111.
+	byte %111..11.
+
+by_jl
+;top
+	byte %111..1..
+	byte %1..1.1..
+	byte %111..111
+	byte %1..1....
+	byte %1111.111
+	
+	byte %1....111
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1....111
+	
+	byte %1...1...
+	byte %1...1...
+	byte %1...1...
+	byte %1...1...
+	byte %1.1.1111
+;score
+	byte %.11..11.
+	byte %1...1...
+	byte %.1..1...
+	byte %..1.1...
+	byte %11...11.
+	
+	byte %.1..11..
+	byte %1.1.1.1.
+	byte %1.1.11..
+	byte %1.1.1.1.
+	byte %.1..1.1.
+	
+	byte %111.....
+	byte %1...1...
+	byte %11......
+	byte %1...1...
+	byte %111.....
+	
+aliens
+;type 1
+	byte %........
+	byte %........
+	byte %...11...
+	byte %11111111
+	byte %..1111..
+;type 2	
+	byte %........
+	byte %...11...
+	byte %..1111..
+	byte %11111111
+	byte %1......1
+;type 3	
+	byte %.1....1.
+	byte %..1111..
+	byte %..1111..
+	byte %..1111..
+	byte %.1....1.
+;type 4
+	byte %..1111..
+	byte %.1.11.1.
+	byte %.1.11.1.
+	byte %.111111.
+	byte %.111111.
+;unused
+	byte %........
+	byte %........
+	byte %..1..1..
+	byte %..1111..
+	byte %..1..1..
+	byte %........
+ship
+	byte %........
+	byte %...11...
+	byte %...11...
+	byte %..1111..
+	byte %.111111.
+	byte %11111111
+	
+bullet
+	byte %...11...
+	byte %...11...
+
+floor
+	byte %11111111
+	byte %..1...1.
+	byte %.1.1.1.1
+	byte %1...1...
+
+;no idea what this is, is changed but not used anywhere
+514
+	pad 1
+score ;515
+	pad 1
+;the sprite of the aliens in the level (no idea what the last byte is
+alien_sprite
+	pad 6
+;the health of each alien
+alien_health
+	pad 5
+;empty byte
+	pad 1
+;the target for bcd operations
+bcd_target ;522
+	pad 4
+	

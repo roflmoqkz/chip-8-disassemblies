@@ -1,0 +1,1610 @@
+;controls
+make_harder_key equ 1
+up_key equ 3
+down_key equ 6
+left_key equ 7
+right_key equ 8
+respawn_key equ 15
+;directions
+pacman_up equ 0
+pacman_left equ 1
+pacman_right equ 2
+pacman_down equ 3
+ghost1_up equ 0
+ghost1_left equ 4
+ghost1_right equ 8
+ghost1_down equ 12
+ghost2_up equ 0
+ghost2_down equ #30
+;left and right flip horiz bias
+ghost2_left equ #90
+ghost2_right equ #a0
+;masks
+pacman_mask equ %......11
+ghost1_mask equ %....11..
+ghost2_mask equ %..11....
+ghost1_change_dir equ %1111..11
+ghost2_change_dir equ %11..1111
+;objects
+pellet equ 5
+power_pellet equ 6
+warp equ 7
+;variables
+;pellets collected
+score var v6
+;bits 0,1-pacman,bits 2,3-ghost 1,bits 4,5-ghost 2
+;bit 6-reserve life (0-yes 1-no),bit 7-horizontal bias
+obj_dirs var v7
+;pacman location
+pacman_x var v8
+pacman_y var v8
+;first ghost location
+ghost1_x var va
+ghost1_y var vb
+;second ghost location
+ghost2_x var vc
+ghost2_y var vd
+
+;jump past the copyright
+	jp start
+	
+copyright
+	byte "2.00 C. Egeberg 18/8-'91"
+	
+start
+;set high resloution
+	high
+;clear total_score
+	xor v0,v0
+	xor v1,v1
+	ld i,total_score
+	ld [i],v1
+;set easy difficulty (25% chance of being chased)
+	ld v0,5
+	ld i,chase_probability
+	ld [i],v0
+	xor obj_dirs,obj_dirs
+game_loop
+	xor score,score
+	call copy_stage
+;clear screen
+	cls
+respawn_loop
+	call draw_stage
+;preserve lack of reserve life
+	ld ve,%.1......
+	and obj_dirs,ve
+;pacman-down,ghost 1-left,ghost 2-right,no horiz bias
+	ld ve,%..1..111
+;init vars
+	or obj_dirs,ve
+	ld pacman_x,52
+	ld pacman_y,24
+	ld ghost1_x,112
+	ld ghost1_y,0
+	ld ghost2_x,4
+	ld ghost2_y,52
+	call draw_pacman
+;draw both ghosts
+	ld i,ghost
+	drw ghost1_x,ghost1_y,8
+	drw ghost2_x,ghost2_y,8
+main_loop
+	call process_pacman
+	se ve,0
+	jp collision_detected
+return_from_collision
+	ld i,chase_probability
+	ld v0,[i]
+	ld v5,v0
+	rnd v4,#ff
+	and v4,v5
+	call process_ghost1
+	rnd v4,#ff
+	and v4,v5
+	call process_ghost2
+;check for make harder key
+	ld v0,make_harder_key
+	sknp v0
+	call make_harder
+;check if we collected all the pelets
+	se score,247
+;if not, start over
+	jp main_loop
+;add score
+	ld ve,v6
+	call add_score_to_total
+;add 100 additional points
+	ld ve,100
+	call add_score_to_total
+	call make_harder
+	jp game_loop
+	
+collision_detected
+;check if power timer is enabled
+	ld v0,dt
+	sne v0,0
+	jp chase_disabled
+;get tile x distance between pacman and ghost 1
+	ld v0,pacman_x
+	shr v0,v0
+	shr v0,v0
+	ld v1,ghost1_x
+	shr v1,v1
+	shr v1,v1
+	sub v0,v1
+;check if it is the same x
+	sne v0,0
+	jp same_x_ghost1
+;or within 1
+	sne v0,1
+	jp same_x_ghost1
+	sne v0,-1
+	jp same_x_ghost1
+;otherwise check ghost 2
+	jp check_collision_with_ghost2
+same_x_ghost1
+;get tile y distance between pacman and ghost 1
+	ld v0,pacman_y
+	shr v0,v0
+	shr v0,v0
+	ld v1,ghost1_y
+	shr v1,v1
+	shr v1,v1
+	sub v0,v1
+;check if it is the same y
+	sne v0,0
+	jp collided_with_ghost1
+;or within 1
+	sne v0,1
+	jp collided_with_ghost1
+	sne v0,-1
+	jp collided_with_ghost1
+;otherwise check ghost 2
+	jp check_collision_with_ghost2
+collided_with_ghost1
+;hide shost
+	ld i,ghost
+	drw ghost1_x,ghost1_y,8
+;place him at the top right corner
+	ld ghost1_x,112
+	ld ghost1_y,0
+	drw ghost1_x,ghost1_y,8
+;make ghost 1 go left
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	ld ve,ghost1_left
+	or obj_dirs,ve
+;add 50 points for ghost 1
+	ld ve,50
+	call add_score_to_total
+;now check ghost 2 anyway
+check_collision_with_ghost2
+;get tile x distance between pacman and ghost 2
+	ld v0,pacman_x
+	shr v0,v0
+	shr v0,v0
+	ld v1,ghost2_x
+	shr v1,v1
+	shr v1,v1
+	sub v0,v1
+;check if it is the same x
+	sne v0,0
+	jp same_x_ghost2
+;or within 1
+	sne v0,1
+	jp same_x_ghost2
+	sne v0,-1
+	jp same_x_ghost2
+;otherwise return
+	jp return_from_collision
+same_x_ghost2
+;get tile y distance between pacman and ghost 2
+	ld v0,pacman_y
+	shr v0,v0
+	shr v0,v0
+	ld v1,ghost2_y
+	shr v1,v1
+	shr v1,v1
+	sub v0,v1
+;check if it is the same y
+	sne v0,0
+	jp collided_with_ghost2
+;or within 1
+	sne v0,1
+	jp collided_with_ghost2
+	sne v0,-1
+	jp collided_with_ghost2
+;otherwise return
+	jp return_from_collision
+;hide shost
+	ld i,ghost
+	drw ghost2_x,ghost2_y,8
+;place him at the bottom left corner
+	ld ghost2_x,4
+	ld ghost2_y,52
+;make ghost 2 go right
+	ld ve,ghost2_change_dir
+	and obj_dirs,ve
+	ld ve,ghost2_right
+	or obj_dirs,ve
+;add 25 points for ghost 2
+	ld ve,25
+	call add_score_to_total
+;now back to the game
+	jp return_from_collision
+	
+;322
+chase_disabled
+;wait 10.5 seconds
+	ld v0,63
+	call wait_for_respawn_key
+;hide all objects
+	call draw_pacman
+	ld i,ghost
+	drw ghost1_x,ghost1_y,8
+	drw ghost2_x,ghost2_y,8
+;lose one life
+	ld ve,#40
+	xor obj_dirs,ve
+	ld v0,v7
+	and v0,ve
+	se v0,0
+	jp respawn_loop
+;add score
+	ld ve,v6
+	call add_score_to_total
+	call update_high_score
+;clear screen
+	cls
+;draw high score
+	ld v6,36
+	ld v7,20
+	ld i,high_score
+	call draw_number
+;draw score
+	ld v6,36
+	ld v7,32
+	ld i,high_score
+	call draw_number
+;position of smiley
+	ld v4,0
+	ld v5,16
+	ld v6,1
+	ld v7,15
+smiley_right_loop
+;draw smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;wait 30 frames or key release
+	ld v0,3
+	call wait_for_respawn_key
+;check if key pressed
+	se ve,0
+	jp player_respawned
+;hide smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;move smiley to the right
+	add v4,4
+	add v5,4
+;check if it reached right side
+	se v4,96
+	jp smiley_right_loop
+smiley_down_loop
+;draw smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;wait 30 frames or key release
+	ld v0,3
+	call wait_for_respawn_key
+;check if key pressed
+	se ve,0
+	jp player_respawned
+;hide smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;move smiley downward
+	add v6,4
+;check if it reached bottom side
+	se v4,45
+	jp smiley_down_loop
+smiley_left_loop
+;draw smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;wait 30 frames or key release
+	ld v0,3
+	call wait_for_respawn_key
+;check if key pressed
+	se ve,0
+	jp player_respawned
+;hide smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;move smiley to the left
+	add v4,-4
+	add v5,-4
+;check if it reached left side
+	se v4,0
+	jp smiley_right_loop
+smiley_up_loop
+;draw smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;wait 30 frames or key release
+	ld v0,3
+	call wait_for_respawn_key
+;check if key pressed
+	se ve,0
+	jp player_respawned
+;hide smiley
+	ld smiley_left
+	drw v4,v6,0
+	ld smiley_right
+	drw v5,v6,0
+;move smiley upward
+	add v6,-4
+;check if it reached top side
+	se v4,1
+	jp smiley_down_loop
+;now go back to right
+	jp smiley_right_loop
+	
+player_respawned
+;dink right eye
+	ld smiley_right
+	drw v5,v6,0
+	ld smiley_dinked
+	drw v5,v6,0
+;then go to start
+	jp start
+	
+;gets input, moves pacman and collects pellet
+process_pacman
+;get pacman direction
+	ld v3,obj_dirs
+	ld ve,pacman_mask
+	and v3,ve
+	ld v4,pacman_x
+	ld v5,pacman_y
+;check down key
+	ld ve,down_key
+	sknp ve
+	jp set_pacman_down
+;check up key
+	ld ve,up_key
+	sknp ve
+	jp set_pacman_up
+;check right key
+	ld ve,right_key
+	sknp ve
+	jp set_pacman_right
+;check left key
+	ld ve,left_key
+	sknp ve
+	jp set_pacman_left
+cant_change_dir
+;move down if needed
+	sne v3,pacman_down
+	add v5,4
+;move up if needed
+	sne v3,pacman_up
+	add v5,-4
+;move right if needed
+	sne v3,pacman_right
+	add v4,4
+;move left if needed
+	sne v3,pacman_left
+	add v4,-4
+;get tile index
+	ld v0,v4
+	ld v1,v5
+	call get_tile
+;and by 8 to check if the tile has a wall
+	ld v2,v0
+	ld ve,8
+	and v0,ve
+temp_dir_changed
+;check if tile has wall
+	se v0,0
+	jp tile_has_wall
+;and by 7 to get tile contents
+	ld ve,7
+	ld v0,v2
+	and v2,ve
+;check if tile has pellet
+	sne v2,pellet
+	jp tile_has_pellet
+;check if tile has power pellet
+	sne v2,power_pellet
+	jp tile_has_power_pellet
+;check if tile has warp
+	sne v2,warp
+	jp tile_has_warp
+tile_processed
+;hide pacman
+	call draw_pacman
+	ld ve,#fc
+;write new pacman dir
+	and obj_dirs,ve
+	or obj_dirs,v3
+;write new pacman position
+	ld pacman_x,v4
+	ld pacman_y,v5
+;draw pacman then return
+	jp draw_pacman
+
+set_pacman_down
+;get tile below pacman
+	ld v0,v4
+	ld v1,v5
+	add v1,4
+	call get_tile
+;and by 8 to check if there is a wall there
+	ld v2,v0
+	ld ve,8
+	and v0,ve
+	se v0,0
+	jp cant_change_dir
+;load temp new props
+	ld v3,pacman_down
+	add v5,4
+	jp temp_dir_changed
+set_pacman_up
+;get tile above pacman
+	ld v0,v4
+	ld v1,v5
+	add v1,-4
+	call get_tile
+;and by 8 to check if there is a wall there
+	ld v2,v0
+	ld ve,8
+	and v0,ve
+	se v0,0
+	jp cant_change_dir
+;load temp new props
+	ld v3,pacman_up
+	add v5,-4
+	jp temp_dir_changed
+set_pacman_right
+;get tile to the right of pacman
+	ld v0,v4
+	ld v1,v5
+	add v0,4
+	call get_tile
+;and by 8 to check if there is a wall there
+	ld v2,v0
+	ld ve,8
+	and v0,ve
+	se v0,0
+	jp cant_change_dir
+;load temp new props
+	ld v3,pacman_right
+	add v4,4
+	jp temp_dir_changed
+set_pacman_left
+;get tile to the left of pacman
+	ld v0,v4
+	ld v1,v5
+	add v0,-4
+	call get_tile
+;and by 8 to check if there is a wall there
+	ld v2,v0
+	ld ve,8
+	and v0,ve
+	se v0,0
+	jp cant_change_dir
+;load temp new props
+	ld v3,pacman_left
+	add v4,-4
+	jp temp_dir_changed
+tile_has_wall
+;draw pacman twice to check collision
+	call draw_pacman
+	drw pacman_x,pacman_y,8
+	ld ve,vf
+	ret
+tile_has_pellet
+;write pacman direction at tile into board (no idea why)
+	ld ve,#f0
+	and v0,ve
+	or v0,v3
+	ld [i],v0
+;hide pellet
+	ld i,pellet_sprite
+	drw v4,v5,8
+	add score,1
+	ld v1,5
+	ld v0,dt
+	sne v0,0
+;if duty timer enabled,play beep
+	ld v1,5
+	ld v0,dt
+	sne v0,0
+	ld st,v1
+	jp tile_processed
+tile_has_power_pellet
+;write pacman direction at tile into board (no idea why)
+	ld ve,#f0
+	and v0,ve
+	or v0,v3
+	ld [i],v0
+;hide power pellet
+	ld i,power_pellet_sprite
+	drw v4,v5,9
+;get 4 points
+	add score,4
+	ld v0,ghost1_x
+	ld v1,ghost1_y
+	call get_tile
+;check if ghost tile is a junction
+	ld ve,#f0
+	and v0,ve
+	se v0,0
+	jp ghost1_dont_flip
+;flip ghost 1 direction
+	ld ve,ghost1_mask
+	xor obj_dirs,ve
+ghost1_dont_flip
+	ld v0,ghost2_x
+	ld v1,ghost2_y
+	call get_tile
+;check if ghost tile is a junction
+	ld ve,#f0
+	and v0,ve
+	se v0,0
+	jp ghost2_dont_flip
+;flip ghost 2 direction
+	ld ve,ghost2_mask
+	xor obj_dirs,ve
+ghost2_dont_flip
+;load chase timer
+	ld v0,255
+	ld st,v0
+	ld dt,v0
+	jp tile_processed
+tile_has_warp
+;go to the right side if needed
+	sne v3,pacman_left
+	ld v4,116
+;go to the left side if needed
+	sne v3,pacman_right
+	ld v4,0
+	jp tile_processed
+	
+process_ghost1
+;load pacman props twice (for backup)
+	ld v2,obj_dirs
+	ld v3,obj_dirs
+;get ghost direction
+	ld ve,ghost1_mask
+	and v2,ve
+;load ghost position
+	ld v0,ghost1_x
+	ld v1,ghost1_y
+	call get_tile
+	ld i,ghost
+;check if the ghost is at a junction
+	ld ve,#f0
+	and v0,ve
+	se v0,0
+	jp ghost1_at_junction
+move_ghost1
+;hide ghost
+	drw ghost1_x,ghost1_y,8
+	sne v2,ghost1_down
+	add ghost1_y,4
+	sne v2,ghost1_up
+	add ghost1_y,-4
+	sne v2,ghost1_right
+	add ghost1_x,4
+	sne v2,ghost1_left
+	add ghost1_x,-4
+;redraw ghost
+	drw ghost1_x,ghost1_y,8
+	ret
+ghost1_at_junction
+	ld ve,#80
+;check if preventative timer effective
+	ld v1,dt
+	se v1,0
+	jp move_ghost1_random
+;small chance of this actually happening
+	se v4,0
+	jp move_ghost1_random
+	ld v1,v0
+;check if bias enabled
+	shl v3
+	se vf,0
+	jp ghost1_horiz_biased
+;check if ghost above pacman
+	ld v3,pacman_y
+	sub v3,ghost1_y
+	sne vf,0
+	jp ghost1_below_pacman
+;or below
+	se v3,0
+	jp ghost1_above_pacman
+;flip bias
+	xor obj_dirs 
+;check if ghost left of pacman
+	ld v3,pacman_x
+	sub v3,ghost1_x
+	sne vf,0
+	jp ghost1_right_of_pacman
+;or right
+	se v3,0
+	jp ghost1_left_of_pacman
+;flip bias again
+	xor obj_dirs 
+	jp move_ghost1_random
+ghost1_horiz_biased
+;check if ghost left of pacman
+	ld v3,pacman_x
+	sub v3,ghost1_x
+	sne vf,0
+	jp ghost1_right_of_pacman
+;or right
+	se v3,0
+	jp ghost1_left_of_pacman
+;flip bias
+	xor obj_dirs 
+;check if ghost above pacman
+	ld v3,pacman_y
+	sub v3,ghost1_y
+	sne vf,0
+	jp ghost1_below_pacman
+;or below
+	se v3,0
+	jp ghost1_above_pacman
+;flip bias again
+	xor obj_dirs
+	jp move_ghost_ranodm
+	
+ghost1_above_pacman
+;check if ghost can go down
+	ld v3,#40
+	and v1,v3
+	se v1,0
+	jp move_ghost1_random
+;hide ghost
+	drw ghost1_x,ghost1_y,8
+;move down
+	add ghost1_y,4
+;redraw ghost
+	drw ghost1_x,ghost1_y,8
+;write new direction
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	ld v2,ghost1_down
+	or obj_dirs,v2
+	ret
+ghost1_below_pacman
+;check if ghost can go up
+	ld v3,#10
+	and v1,v3
+	se v1,0
+	jp move_ghost1_random
+;hide ghost
+	drw ghost1_x,ghost1_y,8
+;move up
+	add ghost1_y,-4
+;redraw ghost
+	drw ghost1_x,ghost1_y,8
+;write new direction
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	ld v2,ghost1_up
+	or obj_dirs,v2
+	ret
+ghost1_left_of_pacman
+;check if ghost can go right
+	ld v3,#20
+	and v1,v3
+	se v1,0
+	jp move_ghost1_random
+;hide ghost
+	drw ghost1_x,ghost1_y,8
+;move right
+	add ghost1_x,4
+;redraw ghost
+	drw ghost1_x,ghost1_y,8
+;write new direction
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	ld v2,ghost1_right
+	or obj_dirs,v2
+	ret
+ghost1_right_of_pacman
+;check if ghost can go left
+	ld v3,#80
+	and v1,v3
+	se v1,0
+	jp move_ghost1_random
+;hide ghost
+	drw ghost1_x,ghost1_y,8
+;move left
+	add ghost1_x,-4
+;redraw ghost
+	drw ghost1_x,ghost1_y,8
+;write new direction
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	ld v2,ghost1_left
+	or obj_dirs,v2
+	ret
+move_ghost1_random
+;randomly get directions where you can move
+	rnd v1,#f0
+;and by the directions available
+	and v0,v1
+	se v0,0
+	jp ghost1_valid_direction
+move_ghost1_failed
+;flip direction and move on
+	ld ve,ghost1_mask
+	xor obj_dirs,ve
+	xor v2,ve
+	jp move_ghost1
+ghost1_valid_direction
+	drw ghost1_x,ghost1_y,8
+;check if we can go left
+	shl v0
+	sne vf,0
+	jp ghost1_cant_go_left
+;if so, move left
+	ld v2,ghost1_left
+	add ghost1_x,-4
+	jp ghost1_moved
+ghost1_cant_go_left
+;check if we can go down
+	shl v0
+	sne vf,0
+	jp ghost1_cant_go_down
+;if so, move down
+	ld v2,ghost1_down
+	add ghost1_y,4
+	jp ghost1_moved
+ghost1_cant_go_down
+;check if we can go right
+	shl v0
+	sne vf,0
+	jp ghost1_cant_go_right
+;if so, move right
+	ld v2,ghost1_right
+	add ghost1_x,4
+	jp ghost1_moved
+ghost1_cant_go_right
+;therefore we go up
+	shl v0
+	sne vf,0
+;this jump will never happening
+	jp move_ghost1_failed
+	ld v2,ghost1_up
+	add ghost1_y,-4
+ghost1_moved
+	drw ghost1_x,ghost1_y,8
+;clear previous orientation
+	ld ve,ghost1_change_dir
+	and obj_dirs,ve
+	or obj_dirs,v2
+	ret
+
+process_ghost2
+;load pacman props twice (for backup)
+	ld v2,obj_dirs
+	ld v3,obj_dirs
+;get ghost direction
+	ld ve,ghost2_mask
+	and v2,ve
+;load ghost position
+	ld v0,ghost2_x
+	ld v1,ghost2_y
+	call get_tile
+	ld i,ghost
+;check if the ghost is at a junction
+	ld ve,#f0
+	and v0,ve
+	se v0,0
+	jp ghost2_at_junction
+move_ghost2
+;hide ghost
+	drw ghost2_x,ghost2_y,8
+	sne v2,ghost2_down
+	add ghost2_y,4
+	sne v2,ghost2_up
+	add ghost2_y,-4
+	sne v2,ghost2_right
+	add ghost2_x,4
+	sne v2,ghost2_left
+	add ghost2_x,-4
+;redraw ghost
+	drw ghost2_x,ghost2_y,8
+	ret
+ghost2_at_junction
+	ld ve,#128
+;check if timer effective
+	ld v1,dt
+	se v1,0
+	jp move_ghost2_random
+;small chance of this actually happening
+	se v4,0
+	jp move_ghost2_random
+	ld v1,v0
+;check if bias enabled
+	shl v3
+	se vf,0
+	jp ghost2_horiz_biased
+;check if ghost above pacman
+	ld v3,pacman_y
+	sub v3,ghost2_y
+	sne vf,0
+	jp ghost2_below_pacman
+;or below
+	se v3,0
+	jp ghost2_above_pacman
+;flip bias
+	xor obj_dirs 
+;check if ghost left of pacman
+	ld v3,pacman_x
+	sub v3,ghost2_x
+	sne vf,0
+	jp ghost2_right_of_pacman
+;or right
+	se v3,0
+	jp ghost2_left_of_pacman
+;flip bias again
+	xor obj_dirs 
+	jp move_ghost2_random
+ghost2_horiz_biased
+;check if ghost left of pacman
+	ld v3,pacman_x
+	sub v3,ghost2_x
+	sne vf,0
+	jp ghost2_right_of_pacman
+;or right
+	se v3,0
+	jp ghost2_left_of_pacman
+;flip bias
+	xor obj_dirs
+;check if ghost above pacman
+	ld v3,pacman_y
+	sub v3,ghost1_y
+	sne vf,0
+	jp ghost1_below_pacman
+;or below
+	se v3,0
+	jp ghost1_above_pacman
+;flip bias again
+	xor obj_dirs
+	jp move_ghost2_ranodm
+
+ghost1_above_pacman
+;check if ghost can go down
+	ld v3,#40
+	and v1,v3
+	se v1,0
+	jp move_ghost2_random
+;hide ghost
+	drw ghost2_x,ghost2_y,8
+;move down
+	add ghost2_y,4
+;redraw ghost
+	drw ghost2_x,ghost2_y,8
+;flip bias for ghost 2
+	xor obj_dirs,ve
+;write new direction
+	ld ve,ghost2_change_dir
+	and obj_dirs,ve
+	ld v2,ghost2_down
+	or obj_dirs,v2
+	ret
+ghost1_below_pacman
+;check if ghost can go up
+	ld v3,#10
+	and v1,v3
+	se v1,0
+	jp move_ghost2_random
+;hide ghost
+	drw ghost2_x,ghost2_y,8
+;move up
+	add ghost2_y,-4
+;redraw ghost
+	drw ghost2_x,ghost2_y,8
+;flip bias for ghost 2
+	xor obj_dirs,ve
+;write new direction
+	ld ve,ghost2_change_dir
+	and obj_dirs,ve
+	ld v2,ghost2_up
+	or obj_dirs,v2
+	ret	
+ghost2_left_of_pacman
+;check if ghost can go right
+	ld v3,#20
+	and v1,v3
+	se v1,0
+	jp move_ghost2_random
+;hide ghost
+	drw ghost2_x,ghost2_y,8
+;move right
+	add ghost2_x,4
+;redraw ghost
+	drw ghost2_x,ghost2_y,8
+;flip bias for ghost 2
+	xor obj_dirs,ve
+;write new direction
+	ld ve,ghost2_change_dir
+	and obj_dirs,ve
+	ld v2,ghost2_right
+	or obj_dirs,v2
+	ret
+ghost2_right_of_pacman
+;check if ghost can go left
+	ld v3,#80
+	and v1,v3
+	se v1,0
+	jp move_ghost2_random
+;hide ghost
+	drw ghost2_x,ghost2_y,8
+;move left
+	add ghost2_x,-4
+;redraw ghost
+	drw ghost2_x,ghost2_y,8
+;flip bias for ghost 2
+	xor obj_dirs,ve
+;write new direction
+	ld ve,ghost2_change_dir
+	and obj_dirs,ve
+	ld v2,ghost2_left
+	or obj_dirs,v2
+	ret
+	
+move_ghost2_random
+;randomly get directions where you can move
+	rnd v1,#f0
+;and by the directions available
+	and v0,v1
+	se v0,0
+	jp ghost2_valid_direction
+move_ghost2_failed
+;flip direction and move on
+	ld ve,ghost2_mask
+	xor obj_dirs,ve
+	xor v2,ve
+	jp move_ghost2
+ghost2_valid_direction
+	drw ghost2_x,ghost2_y,8
+;check if we can go left
+	shl v0
+	sne vf,0
+	jp ghost2_cant_go_left
+;if so, move left
+	ld v2,ghost2_left
+	add ghost2_x,-4
+	jp ghost2_moved
+ghost2_cant_go_left
+;check if we can go down
+	shl v0
+	sne vf,0
+	jp ghost2_cant_go_down
+;if so, move down
+	ld v2,ghost2_down
+	add ghost2_y,4
+	jp ghost2_moved
+ghost2_cant_go_down
+;check if we can go right
+	shl v0
+	sne vf,0
+	jp ghost2_cant_go_right
+;if so, move right
+	ld v2,ghost2_right
+	add ghost2_x,4
+	jp ghost2_moved
+ghost2_cant_go_right
+;therefore we go up
+	shl v0
+	sne vf,0
+;this jump will never happening
+	jp move_ghost2_failed
+	ld v2,ghost2_up
+	add ghost2_y,-4
+ghost2_moved
+	drw ghost2_x,ghost2_y,8
+;clear previous orientation
+;constant includes bias flip
+	ld ve,#4f
+	and obj_dirs,ve
+	or obj_dirs,v2
+	ret
+	
+;draws pacman according to position and facing
+draw_pacman
+	ld v0,obj_dirs
+;and by 3 to get orientation
+	ld ve,pacman_mask
+	and v0,ve
+;mult by 2 to get sprite index
+	shl v0
+;combine pacman x and y
+	ld v1,pacman_x
+	add v1,pacman_y
+;and by 4 to get frame
+	ld ve,4
+	and v1,ve
+;offset index if needed
+	sne v1,0
+	add v0,1
+;multiply by 8 to get sprite adress
+	shl v0
+	shl v0
+	shl v0
+;draw pacman
+	ld i,pacman
+	add i,v0
+	drw pacman_x,pacman_y,8
+	ld ve,vf
+	ret
+	
+;copies the entire stage from the initial stage
+copy_stage
+;counts graphics
+	ld ve,0
+	ld i,copy_stage_loop
+;add the index times 4
+	add i,ve
+	add i,ve
+	add i,ve
+	add i,ve
+;load 4 byte graphic
+	ld v3,[i]
+	ld i,be0
+;add the index times 4
+	add i,ve
+	add i,ve
+	add i,ve
+	add i,ve
+;store 4 byte graphic
+	ld [i],v3
+;next graphic
+	add ve,1
+;loop until done
+	se ve,128
+	jp copy_stage_loop
+	ret
+
+;draws the stage
+draw_stage
+;stores x and y to draw
+	xor v2,v2
+	xor v3,v3
+	ld ve,#0f
+draw_stage_loop
+	ld v0,v2
+	ld v1,v3
+	call get_tile
+;remove 4 left bytes
+	and v0,ve
+;shift left to get index
+	shl v0
+	shl v0
+;draw graphic
+	ld i,stage_graphics
+	add i,v0
+	drw v2,v3,4
+;next block
+	add v2,4
+;loop until donw
+	se v2,128
+	jp draw_stage_loop
+;next row
+	xor v2,v2
+	add v3,4
+;loop until done
+	sne v3,64
+	ret
+	jp draw_stage_loop
+	
+;get stage tile at x=v0,y=v1
+get_tile
+;divide x by 4
+	shr v0
+	shr v0
+;round y down to nearest 4 then multiply by 8
+	shr v1
+	shr v1
+	shl v1
+	shl v1
+	shl v1
+	shl v1
+;add both to get index
+	ld i,stage
+	add i,v1
+	add i,v1
+	add i,v0
+	ld v0,[i]
+	ret
+
+;makes the game harder
+make_harder
+	ld i,chase_probability
+	ld v0,[i]
+	shr v0
+	ld [i],v0
+;wait until key released
+wait_for_key_release
+	ld v0,make_harder_key
+	sknp v0
+	jp wait_for_key_release
+	ret
+
+;draws a 5 digit number in i (in binary) at x=v6,y=v7
+draw_number
+	ld v1,[i]
+	ld ve,1
+;init counter
+	xor v4,v4
+;copy number
+	ld v2,v0
+	ld v3,v1
+divide_by_ten_thousand_loop
+;10000=39*256+16
+;check if low byte is less than 16
+	ld v5,16
+	sub v3,v5
+	sne vf,0
+;sub carry from high byte
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_ten_thousand
+;check if high byte is less than 39
+	ld v5,39
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_ten_thousand
+;update number
+	ld v0,v2
+	ld v1,v3
+;increment ten thousands digit
+	add v4,ve
+;go again
+	jp divide_by_ten_thousand_loop
+num_less_than_ten_thousand
+;draw ten thousands digit
+	ld hf,v4
+	drw v6,v7,10
+;next digit
+	add v6,12
+;init counter
+	xor v4,v4
+;copy number
+	ld v2,v0
+	ld v3,v1
+divide_by_thousand_loop
+;1000=3*256+248
+;check if low byte is less than 248
+	ld v5,248
+	sub v3,v5
+	sne vf,0
+;sub carry from high byte
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_thousand
+;check if high byte is less than 3
+	ld v5,3
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_thousand
+;update number
+	ld v0,v2
+	ld v1,v3
+;increment thousands digit
+	add v4,ve
+;go again
+	jp divide_by_thousand_loop
+num_less_than_thousand
+;draw thousands digit
+	ld hf,v4
+	drw v6,v7,10
+;next digit
+	add v6,12
+;init counter
+	xor v4,v4
+;copy number
+	ld v2,v0
+	ld v3,v1
+divide_by_hundred_loop
+;check if num is less than 100
+	ld v5,248
+	sub v3,v5
+	sne vf,0
+;sub carry from high byte
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_hundred
+;update number
+	ld v0,v2
+	ld v1,v3
+;increment hundreds digit
+	add v4,ve
+;go again
+	jp divide_by_hundred_loop
+num_less_than_hundred
+;draw hundreds digit
+	ld hf,v4
+	drw v6,v7,10
+;next digit
+	add v6,12
+;last 2 digits can be done with bcd
+;init counter
+	xor v4,v4
+;copy number
+	ld v2,v0
+	ld v3,v1
+divide_by_ten_loop
+;check if num is less than 10
+	ld v5,248
+	sub v3,v5
+	sne vf,0
+;sub carry from high byte
+	sub v2,ve
+	sne vf,0
+	jp num_less_than_ten
+;update number
+	ld v0,v2
+	ld v1,v3
+;increment hundreds digit
+	add v4,ve
+;go again
+	jp divide_by_ten_loop
+num_less_than_ten
+;draw tens digit
+	ld hf,v4
+	drw v6,v7,10
+;next digit
+	add v6,12
+;draw units digit
+	ld hf,v4
+	drw v6,v7,10
+	ret
+
+;adds score to total score
+add_score_to_total
+	ld i,total_score
+	ld v1,[i]
+;add score to total score
+	add v1,ve
+;add carry if needed
+	se vf,0
+	add v0,1
+;write new score
+	ld i,total_score
+	ld [i],v1
+
+;update the high score if needed
+update_high_score
+	ld i,total_score
+	ld ve,[i]
+	ld ve,v0
+;compare high bytes of total and high scores
+	sub ve,v2
+	sne vf,0
+;if less,quit
+	ret
+;check if equal
+	se ve,0
+	jp high_bytes_not_equal
+;if so, compre low bytes
+	ld ve,v1
+	sub ve,v3
+	sne vf,0
+	ret
+high_bytes_not_equal
+;write new high score
+	ld i,high_score
+	ld [i],v1
+	ret
+
+;waits until the respawn key is pressed or until v0*16 frames are gone
+wait_for_respawn_key
+	xor ve,ve
+	ld v2,respawn_key
+;decrement 1 every time (why not just add -1)
+	ld v3,-1
+;16 frames per unit
+	ld v1,16
+wait_for_respawn_key_loop
+;check if key pressed
+	sknp v2
+	jp respawn_key_pressed
+;loop until unit done
+	add v1,v3
+	se v1,0
+	jp wait_for_respawn_key_loop
+;next unit
+	ld v1,16
+	add v0,v3
+;loop until dune
+	se v0,0
+	jp wait_for_respawn_key_loop
+	ret
+respawn_key_pressed
+	ld ve,1
+	ret
+
+;the total score across all attempts
+total_score
+	pad 2
+;maximum total score
+high_score
+	pad 2
+;gets rnds by this and if equals 0, then chase
+chase_probability
+	pad 2
+pacman
+;up 1
+	byte %........
+	byte %..1...1.
+	byte %.11...11
+	byte %.11...11
+	byte %.111.111
+	byte %.1111111
+	byte %..11111.
+	byte %...111..
+;up 2
+	byte %........
+	byte %...111..
+	byte %...1111.
+	byte %.1.111.1
+	byte %.1.111.1
+	byte %.11.1111
+	byte %..11111.
+	byte %...111..
+;left 1
+	byte %........
+	byte %..1111..
+	byte %.111111.
+	byte %....1111
+	byte %.....111
+	byte %....1111
+	byte %.111111.
+	byte %..1111..
+;left 2
+	byte %........
+	byte %...111..
+	byte %..1..11.
+	byte %.1111111
+	byte %.1111111
+	byte %.1111.11
+	byte %.....11.
+	byte %...111..
+;right 1	
+	byte %........
+	byte %...1111.
+	byte %..111111
+	byte %.1111...
+	byte %.111....
+	byte %.1111...
+	byte %..111111
+	byte %...1111.
+;right 2
+	byte %........
+	byte %...111..
+	byte %..11..1.
+	byte %.1111111
+	byte %.1111111
+	byte %.11.1111
+	byte %..11....
+	byte %...111..
+;down 1
+	byte %........
+	byte %...111..
+	byte %..11111.
+	byte %.1111111
+	byte %.111.111
+	byte %.11...11
+	byte %.11...1.
+	byte %..1...1.
+;down 2
+	byte %........
+	byte %...111..
+	byte %..11111.
+	byte %.11.1111
+	byte %.1.111.1
+	byte %.1.111.1
+	byte %...1111.
+	byte %...111..
+ghost
+;includes a hole to not cover the pellets
+	byte %........
+	byte %...111..
+	byte %..11111.
+	byte %.1..1..1
+	byte %.111.111
+	byte %.1111111
+	byte %.11...11
+	byte %.1111111
+pellet_sprite
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %1.......
+	byte %........
+	byte %........
+	byte %........
+power_pellet_sprite
+	byte %........
+	byte %........
+	byte %........
+	byte %........
+	byte %1.......
+	byte %1.......
+	byte %........
+	byte %........
+	
+stage_graphics
+;the first 5 are empty
+;4-empty
+	pad 20
+;5-pellet
+	byte %1.......
+	byte %........
+	byte %........
+	byte %........
+;6-power pellet
+	byte %1.......
+	byte %1.......
+	byte %........
+	byte %........
+;7-warp
+	pad 4
+;8-top wall
+	byte %1111....
+	byte %........
+	byte %........
+	byte %........
+;9-unused
+	pad 4
+;a-left wall
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;b-unused
+	pad 4
+;c-top left wall
+	byte %1111....
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;d-top right wall
+	byte %1.......
+	byte %1.......
+	byte %1.......
+	byte %1.......
+;e-bottom left wall
+	byte %1111....
+	byte %........
+	byte %........
+	byte %........
+;f-bottom right/point wall
+	byte %1.......
+	byte %........
+	byte %........
+	byte %........
+	
+;high nybble-whether a tile is a junction/corner
+;byte 7-can go left
+;byte 6-can go down
+;byte 5-can go right
+;byte 4-can go up
+;low nybble-content of tile (according to graphics)
+;stored top left to bottom right, row by row, every row is 32 bytes
+initial_stage
+	byte #0c,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#0d ;0
+	byte #0c,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#0d
+	byte #0a,#65,#05,#05,#05,#05,#e5,#05,#05,#e5,#05,#05,#05,#05,#c5,#0a ;4
+	byte #0a,#65,#05,#05,#05,#05,#e5,#05,#05,#e5,#05,#05,#05,#05,#c5,#0a
+	byte #0a,#05,#0c,#08,#08,#0f,#05,#0c,#0d,#05,#08,#08,#08,#0d,#05,#0e ;8
+	byte #0f,#05,#0c,#08,#08,#0f,#05,#0c,#0d,#05,#08,#08,#08,#0d,#05,#0a
+	byte #0a,#05,#0a,#65,#06,#05,#95,#0a,#0a,#35,#05,#05,#c5,#0a,#35,#05 ;12
+	byte #05,#95,#0a,#65,#05,#05,#95,#0a,#0a,#35,#05,#06,#c5,#0a,#35,#0a
+	byte #0a,#05,#0f,#05,#08,#08,#08,#08,#08,#0c,#08,#0f,#05,#08,#08,#08 ;16
+	byte #08,#08,#0f,#05,#08,#08,#0c,#08,#08,#08,#08,#0f,#05,#0f,#05,#08
+	byte #0a,#75,#05,#b5,#05,#05,#05,#05,#c5,#0a,#65,#05,#b5,#05,#e5,#05 ;20
+	byte #05,#e5,#05,#b5,#05,#c5,#0a,#65,#05,#05,#05,#05,#b5,#05,#d5,#0a
+	byte #0a,#05,#0c,#08,#08,#08,#08,#0d,#05,#0f,#05,#0c,#08,#0f,#05,#08 ;24
+	byte #0f,#05,#08,#08,#0d,#05,#0f,#05,#0c,#08,#08,#08,#08,#0d,#05,#0a
+	byte #0f,#05,#0f,#65,#05,#05,#d5,#0a,#35,#e5,#95,#0a,#65,#05,#b0,#05 ;28
+	byte #05,#b5,#05,#c5,#0a,#35,#e5,#95,#0a,#65,#05,#05,#c5,#0f,#05,#0f
+	byte #07,#74,#05,#d5,#08,#0f,#05,#0e,#0f,#05,#08,#0f,#05,#0c,#08,#08 ;32
+	byte #08,#08,#0d,#05,#08,#0f,#05,#0e,#0f,#05,#08,#0f,#75,#05,#d4,#07
+	byte #0a,#05,#0a,#35,#05,#05,#f5,#05,#05,#b5,#05,#05,#d5,#08,#08,#0d ;36
+	byte #0c,#08,#0f,#75,#05,#05,#b5,#05,#05,#f5,#05,#05,#95,#0a,#05,#0a
+	byte #0a,#05,#08,#08,#08,#0d,#05,#0c,#08,#08,#08,#0d,#35,#05,#c5,#0a ;40
+	byte #0a,#65,#05,#95,#0c,#08,#08,#08,#0d,#05,#0c,#08,#08,#0f,#05,#0a
+	byte #0a,#75,#05,#06,#c5,#0a,#05,#08,#08,#08,#08,#08,#08,#0f,#05,#08 ;44
+	byte #0f,#05,#08,#08,#08,#08,#08,#08,#0f,#05,#0a,#63,#06,#05,#d5,#0a
+	byte #0a,#05,#0c,#0d,#05,#0a,#35,#05,#05,#05,#05,#e5,#05,#05,#f5,#05 ;48
+	byte #05,#f5,#05,#05,#e5,#05,#05,#05,#05,#95,#0a,#05,#0c,#0d,#05,#08
+	byte #0a,#05,#08,#0f,#05,#08,#08,#08,#08,#08,#0f,#05,#0c,#0d,#05,#08 ;52
+	byte #0f,#05,#0c,#0d,#05,#08,#08,#08,#08,#08,#0f,#05,#08,#0f,#05,#0a
+	byte #0a,#35,#05,#05,#b5,#05,#05,#05,#05,#05,#05,#95,#0a,#0a,#35,#05 ;56
+	byte #05,#95,#0a,#0a,#35,#05,#05,#05,#05,#05,#05,#b5,#05,#05,#95,#0a
+	byte #08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#0f,#08,#08,#08 ;60
+	byte #08,#08,#0f,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08,#08
+	
+smiley_left
+;high res graphic
+	word %.......1111.....
+	word %......1....1....
+	word %.....1..11..1...
+	word %....1..1111..1..
+	word %....1.111111.1..
+	word %....1.111.11.1..
+	word %....1..1111..1.1
+	word %.....1..11..1..1
+	word %......1....1..11
+	word %.......1111..111
+	word %.............111
+	word %.......11.....11
+	word %......111111....
+	word %.......111111111
+	word %........11111111
+	word %..........111111
+	
+smiley_right
+;high res graphic
+	word %....1111........
+	word %...1....1.......
+	word %..1..11..1......
+	word %.1..1111..1.....
+	word %.1.111111.1.....
+	word %.1.111.11.1.....
+	word %.1..1111..1.....
+	word %..1..11..1......
+	word %1..1....1.......
+	word %11..1111........
+	word %11..............
+	word %1.....11........
+	word %...111111.......
+	word %11111111........
+	word %1111111.........
+	word %11111...........
+	
+smiley_dinked
+;high res graphic
+	word %....1111........
+	word %...111111.......
+	word %..11111111......
+	word %.1111111111.....
+	word %.1111111111.....
+	word %.1.11111111.....
+	word %.1...111111.....
+	word %..1.....11......
+	word %1..1....1.......
+	word %11..1111........
+	word %11..............
+	word %1.....11........
+	word %...111111.......
+	word %11111111........
+	word %1111111.........
+	word %11111...........
+	
+stage

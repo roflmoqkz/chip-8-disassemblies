@@ -1,0 +1,161 @@
+;direction constants
+right equ 1
+left equ 0
+;additional constant
+score_per_ball equ 5
+initial_missiles equ 10
+shoot_key equ 8
+;position of stuff
+ship_x var v0
+ship_y var v1
+missile_x var v2
+missile_y var v3
+;has the missile collided with the ball?
+missile_collided var v4
+;number of balls left to shoot
+num_balls var v5
+;number of missiles available to shoot
+num_missiles var v6
+score var v7
+;the number of frames between the movement of the ship
+ship_speed var vc
+;the direction the ship moves
+move_dir var ve
+;jump past the copyright
+	jp start
+;copyright
+	byte "MISSILE by David WINTER"
+start ;219
+;initialize vars
+	ld ship_speed,12
+;ball positions
+	ld v0,0
+	ld v1,0
+	ld num_balls,8
+	ld num_missiles,initial_missiles
+	ld score,0
+;the ship's movement direction 
+	ld move_dir,1
+	ld i,ball
+draw_balls_loop
+;draw the ball
+	drw v0,v1,4
+;next ball is 8 over
+	add v0,8
+;loop until reaching 64 (the right side)
+	se v0,64
+;init ship
+	ld ship_x,0
+	ld ship_y,28
+	ld i,ship
+;draw the ship
+	drw ship_x,ship_y,4
+	ld i,ship
+	drw ship_x,ship_y,4
+;move the ship right if it is moving right
+	se ve,right
+;otherwise moving left
+	jp move_left
+;move the ship right
+	add ship_x,4
+;make the ship move left if we reached the end
+	sne v0,56
+	ld move_dir,left
+;move on (and not left)
+	jp draw_ship
+move_left
+;move the ship left
+	add ship_x,-4
+;make the ship move right if we reached the end
+	sne v0,0
+	ld move_dir,right
+draw_ship
+	drw ship_x,ship_y,4
+;wait untill the ship moves again
+	ld dt,ship_speed
+ship_wait_loop
+	ld vb,dt
+	se vb,0
+	jp ship_wait_loop
+;check if shoot key is pressed
+	ld v2,shoot_key
+	skp v2
+;otherwise don't shoot
+	jp shoot_is_not_pressed
+;reduce the ship delay by 2 if it isn't 0
+	se ship_speed,0
+	add ship_speed,2
+	ld missile_y,27
+	ld missile_x,ship_x
+;initially draw the missile
+	ld i,missile
+	drw missile_x,missile_y,1
+;missile not yet collided
+	ld missile_collided,0
+move_missile_loop
+;move the missile upwards
+	drw missile_x,missile_y,1
+	add missile_y,-1
+	drw missile_x,missile_y,1
+;check collision
+	se vf,0
+	ld missile_collided,1
+;check if the missile reached the ball row
+	se missile_y,3
+;if so quit the loop
+	jp move_missile_loop
+;hide the missile
+	drw missile_x,missile_y,1
+;if missile not collided
+	se missile_collided,1
+	jp not_collided
+	add score,score_per_ball
+;clear the ball
+	ld v2,ship_x
+	ld v3,0
+	ld i,ball
+	drw v2,v3,4
+;check if we have balls left
+	sne num_balls
+	jp game_done
+not_collided
+;use up one of the missle
+	add num_missiles,-1
+;end the game if no missiles left
+	se num_missiles,0
+shoot_is_not_pressed ;295
+	jp main_loop
+game_done
+	ld i,score_bcd
+;ge the digits of the score
+	bcd score
+;get the digits in regs
+	ld v2,[i]
+;init score position
+	ld v3,27
+	ld v4,13
+;draw tens digit
+	ld f,v1
+	drw v3,v4,5
+;move over
+	add v3,5
+;draw ones digit
+	ld f,v2
+	drw v3,v4,5
+;that's it, go in an infinite loop
+infinite_loop
+	jp infinite_loop
+;graphics
+ball ;2ad
+	byte %...1....
+	byte %..111...
+	byte %..111...
+;the ship and missile graphics are shared with the bottom of the ball
+ship
+missile
+	byte %...1....
+	byte %..111...
+	byte %.11111..
+	byte %1111111.
+;stores the bcd of the score
+score_bcd
